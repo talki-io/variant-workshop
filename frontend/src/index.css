@@ -1,0 +1,137 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+/* —— 设计变量：亮色（默认，回退值与旧版一致 → 向后兼容）—— */
+:root {
+  --app-text: #111827;
+  --app-text-secondary: #6b7280;
+  --app-border: #e5e7eb;
+  --app-bg-layout: #f8fafc;
+  --app-bg-container: #ffffff;
+  /* 语义「柔和底色」——KPI 图标/徽标/进度轨 */
+  --app-soft-primary: #eff4ff;
+  --app-soft-success: #ecfdf5;
+  --app-soft-violet: #f5f3ff;
+  --app-track: #f1f5f9;
+  /* 阴影：卡片默认极浅，hover 抬升 */
+  --app-shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
+  --app-shadow-hover: 0 8px 24px rgba(16, 24, 40, 0.1);
+  --app-scrollbar: #d1d5db;
+}
+
+/* —— 暗色主题 —— */
+:root[data-theme='dark'] {
+  --app-text: #e6edf3;
+  --app-text-secondary: #8b98a9;
+  --app-border: #232c3b;
+  --app-bg-layout: #0d1117;
+  --app-bg-container: #141a24;
+  --app-soft-primary: #1d2b45;
+  --app-soft-success: #0f2a20;
+  --app-soft-violet: #241f3d;
+  --app-track: #1e2733;
+  --app-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --app-shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.55);
+  --app-scrollbar: #39424f;
+}
+
+body {
+  font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', -apple-system,
+    BlinkMacSystemFont, sans-serif;
+  background: var(--app-bg-layout);
+  color: var(--app-text);
+  -webkit-font-smoothing: antialiased;
+  /* 亮/暗切换时表面色平滑过渡 */
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* 让 antd 主要表面在切主题时也一起平滑过渡（只过渡色，不过渡布局） */
+.ant-layout,
+.ant-layout-sider,
+.ant-layout-header,
+.ant-card,
+.ant-menu,
+.ant-input,
+.ant-input-affix-wrapper,
+.ant-btn,
+.ant-table,
+.ant-table-cell {
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease,
+    box-shadow 0.2s ease !important;
+}
+
+/* —— 卡片：默认极浅阴影 + hover 抬升。仅对可交互卡片抬升，避免看板 KPI 抖动。 —— */
+.ant-card {
+  box-shadow: var(--app-shadow-card);
+}
+.lift-card {
+  cursor: pointer;
+}
+.lift-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--app-shadow-hover);
+  border-color: color-mix(in srgb, #2563eb 40%, var(--app-border));
+}
+
+/* 主按钮微交互：hover 轻微抬升 */
+.ant-btn-primary:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.28);
+}
+
+/* 软提示句：黄色波浪下划线 */
+.soft-flag-underline {
+  text-decoration: underline wavy #f59e0b;
+  text-underline-offset: 3px;
+}
+
+/* —— 路由切换过渡：内容淡入 + 轻微上移 —— */
+@keyframes vw-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.vw-page-enter {
+  animation: vw-page-in 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 尊重「减少动态效果」的系统偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .vw-page-enter,
+  .lift-card,
+  .ant-btn-primary {
+    animation: none !important;
+    transition: none !important;
+  }
+  .lift-card:hover,
+  .ant-btn-primary:not(:disabled):hover {
+    transform: none;
+  }
+}
+
+/* 滚动条微调（随主题） */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--app-scrollbar);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
