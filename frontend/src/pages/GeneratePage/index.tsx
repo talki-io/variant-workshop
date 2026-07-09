@@ -33,6 +33,7 @@ export default function GeneratePage() {
   // 引用新闻的事实底稿：随发送一起送后端 grounding。仅反映「本次显式引用」，
   // 恢复历史会话不设它——那类会话的「重新生成」由后端读 session.news_context 保持贴事实。
   const [citedNews, setCitedNews] = useState<NewsContext | undefined>()
+  const [styleRefs, setStyleRefs] = useState<string[]>([]) // 本次临时仿写范本
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [generating, setGenerating] = useState(false)
@@ -48,6 +49,7 @@ export default function GeneratePage() {
     setToneId(toneList.some((t) => t.id === s.toneId) ? s.toneId : toneList[0]?.id)
     setBatch({ toneId: s.toneId, diversity: s.diversity, variants: s.variants, sessionId: s.id })
     setLastPrompt(s.prompt)
+    setStyleRefs(s.styleRefs ?? []) // 恢复该会话的临时仿写范本
     const src = s.sourceHeadline ? `（引用新闻：${s.sourceHeadline}）` : ''
     const t = s.createdAt.slice(11, 16) || undefined // "YYYY-MM-DD HH:MM:SS" → HH:MM
     setMessages([
@@ -104,6 +106,7 @@ export default function GeneratePage() {
         content,
         citedNews?.headline || prefillNews || undefined,
         citedNews,
+        styleRefs.length ? styleRefs : undefined,
       )
       setBatch(result)
       // 生成已落库为会话，刷新历史列表（含刚产出的这次）
@@ -246,6 +249,8 @@ export default function GeneratePage() {
           generating={generating}
           onQuickAction={handleQuickAction}
           onCiteNews={handleCiteNews}
+          styleRefs={styleRefs}
+          onStyleRefsChange={setStyleRefs}
         />
       </div>
       <div style={{ flex: 1, minWidth: 380, height: '100%', overflow: 'hidden' }}>

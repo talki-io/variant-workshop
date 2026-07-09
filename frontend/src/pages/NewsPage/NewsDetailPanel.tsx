@@ -3,6 +3,7 @@ import { Card, Tag, Space, Button, Empty, App } from 'antd'
 import { ExportOutlined, CopyOutlined, ArrowRightOutlined, CloseOutlined } from '@ant-design/icons'
 import HeatBar from '../../components/HeatBar'
 import { brand } from '../../theme/tokens'
+import { newsFreshness } from '../../utils/time'
 import type { NewsItem } from '../../types'
 
 interface Props {
@@ -22,13 +23,15 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 
 export default function NewsDetailPanel({ item, onGenerate, onClose }: Props) {
   const { message } = App.useApp()
+  // 相对时间/新鲜度实时计算（弃用抓取时定格的 publishedLabel/freshness）
+  const fresh = item ? newsFreshness(item.publishedAt) : null
 
   const copy = () => {
     if (!item) return
     const text = [
       item.headline,
       '',
-      `来源：${item.source} · ${item.publishedLabel}`,
+      `来源：${item.source} · ${fresh?.label ?? ''}`,
       `关键事实：${item.keyFacts.join('、')}`,
       `相关标的：${item.tickers.join('、')}`,
       `原文：${item.url}`,
@@ -62,13 +65,13 @@ export default function NewsDetailPanel({ item, onGenerate, onClose }: Props) {
                 <Tag color="blue" bordered={false}>
                   {item.source}
                 </Tag>
-                <span style={{ color: brand.textSecondary }}>{item.publishedLabel}</span>
+                <span style={{ color: brand.textSecondary }}>{fresh?.label}</span>
               </Space>
             </Field>
             <Field label="关键事实 (key_facts)">
               <Space size={6} wrap>
                 {item.keyFacts.map((f) => (
-                  <Tag key={f} bordered={false} style={{ background: '#F3F4F6', margin: 0 }}>
+                  <Tag key={f} bordered={false} style={{ background: 'var(--app-track)', margin: 0 }}>
                     {f}
                   </Tag>
                 ))}
@@ -99,11 +102,11 @@ export default function NewsDetailPanel({ item, onGenerate, onClose }: Props) {
               )}
             </Field>
             <Field label="新鲜度 (freshness)">
-              {item.freshness === 'breaking' ? (
+              {fresh?.freshness === 'breaking' ? (
                 <Tag color="error" bordered={false}>
                   突发
                 </Tag>
-              ) : item.freshness === 'recent' ? (
+              ) : fresh?.freshness === 'recent' ? (
                 <Tag color="warning" bordered={false}>
                   近期
                 </Tag>

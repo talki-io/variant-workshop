@@ -7,8 +7,15 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..models import StyleSample, Tone, User
-from ..schemas import OkOut, StyleSampleIn, StyleSampleOut, ToneOut
-from ..security import get_current_user
+from ..schemas import (
+    OkOut,
+    StyleSampleIn,
+    StyleSampleOut,
+    ToneCreateIn,
+    ToneOut,
+    ToneUpdateIn,
+)
+from ..security import get_current_user, require_admin
 
 router = APIRouter(prefix="/api", tags=["tones"])
 
@@ -16,6 +23,50 @@ router = APIRouter(prefix="/api", tags=["tones"])
 @router.get("/tones", response_model=list[ToneOut])
 def get_tones(db: Session = Depends(get_db), _: User = Depends(get_current_user)) -> list[Tone]:
     return list(db.scalars(select(Tone).order_by(Tone.id)))
+
+
+# ===== 账号/调性管理（admin）=====
+@router.post("/tones", response_model=ToneOut, status_code=status.HTTP_201_CREATED)
+def create_tone(body: ToneCreateIn, db: Session = Depends(get_db), _: User = Depends(require_admin)) -> Tone:
+    """新增账号/调性（admin）。"""
+    if not body.name.strip() or not body.handle.strip():
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="账号名与 handle 不能为空")
+    t = Tone(id="t_" + uuid4().hex[:8], handle=body.handle.strip(),
+             name=body.name.strip(), desc=body.desc.strip())
+    db.add(t)
+    db.commit()
+    db.refresh(t)
+    return t
+
+
+@router.put("/tones/{tone_id}", response_model=ToneOut)
+def update_tone(
+    tone_id: str, body: ToneUpdateIn, db: Session = Depends(get_db), _: User = Depends(require_admin)
+) -> Tone:
+    """部分更新账号/调性（admin）。"""
+    t = db.get(Tone, tone_id)
+    if t is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="账号不存在")
+    for field in ("handle", "name", "desc"):
+        val = getattr(body, field)
+        if val is not None:
+            setattr(t, field, val)
+    db.commit()
+    db.refresh(t)
+    return t
+
+
+@router.delete("/tones/{tone_id}", response_model=OkOut)
+def delete_tone(tone_id: str, db: Session = Depends(get_db), _: User = Depends(require_admin)) -> OkOut:
+    """删除账号/调性 + 其参考爆款样本（admin）。历史变体保留 tone_id 不动。"""
+    t = db.get(Tone, tone_id)
+    if t is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="账号不存在")
+    for s in db.scalars(select(StyleSample).where(StyleSample.tone_id == tone_id)):
+        db.delete(s)
+    db.delete(t)
+    db.commit()
+    return OkOut(ok=True)
 
 
 # ===== 账号风格样本（往期爆款，few-shot 锚）=====

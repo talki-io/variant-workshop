@@ -84,6 +84,7 @@ class GenerationSession(Base):
     prompt: Mapped[str] = mapped_column(Text, nullable=False)
     source_headline: Mapped[str | None] = mapped_column(Text, nullable=True)
     news_context: Mapped[dict | None] = mapped_column(JSONB, nullable=True)  # 引用新闻的事实底稿快照（grounding + 重生成复用）
+    style_refs: Mapped[list | None] = mapped_column(JSONB, nullable=True)  # 本次临时仿写范本（不入样本库，随会话存供恢复/重生成）
     diversity: Mapped[float] = mapped_column(Float, nullable=False)
     created_at: Mapped[str] = mapped_column(String, nullable=False)
     favorite: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -160,6 +161,44 @@ class StyleVector(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     tone_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     embedding: Mapped[list] = mapped_column(Vector(1536), nullable=True)
+
+
+class LlmModel(Base):
+    """模型库：管理员维护的可用模型（多厂商），供各管线场景绑定。
+
+    provider=anthropic 走原生 SDK；provider=openai 走 OpenAI 兼容 /chat/completions（httpx），
+    覆盖 OpenAI/DeepSeek/Kimi/Qwen/Gemini(OpenAI端点)/各类中转。base_url 为中转/自定义端点，
+    api_key 各模型独立（空则 anthropic 回退 .env 的 ANTHROPIC_API_KEY）。
+    """
+
+    __tablename__ = "llm_model"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)  # 展示名
+    provider: Mapped[str] = mapped_column(String, nullable=False)  # anthropic | openai
+    model_id: Mapped[str] = mapped_column(String, nullable=False)  # 厂商裸模型串
+    base_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    api_key: Mapped[str | None] = mapped_column(String, nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+
+
+class ModelConfig(Base):
+    """管线场景 → 绑定模型库某模型 + 参数（动态可改，无需改代码）。
+
+    scene 固定为管线阶段（generate/clean/compliance）；model_id 现引用 llm_model.id（模型库主键）；
+    max_tokens 该场景主调用上限；temperature 可选（新模型思考态下作用有限，留空则用模型默认）。
+    """
+
+    __tablename__ = "model_config"
+
+    scene: Mapped[str] = mapped_column(String, primary_key=True)  # generate | clean | compliance
+    label: Mapped[str] = mapped_column(String, nullable=False)  # 中文展示名
+    model_id: Mapped[str] = mapped_column(String, nullable=False)  # → llm_model.id
+    max_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+    temperature: Mapped[float | None] = mapped_column(Float, nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    updated_at: Mapped[str] = mapped_column(String, nullable=False)
 
 
 class StyleSample(Base):

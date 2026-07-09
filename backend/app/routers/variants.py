@@ -34,6 +34,10 @@ _MODEL_LABEL = {"haiku": "Haiku", "sonnet": "Sonnet", "opus": "Opus"}
 _FEWSHOT_MAX = 4  # 生成时注入的爆款样本条数上限（与 pipeline 一致）
 
 
+_ADHOC_MAX = 3  # 临时仿写范本最多取几段
+_FEWSHOT_TOTAL = 6  # few-shot 总量上限（控 token）
+
+
 def _load_samples(db: Session, tone_id: str) -> list[str]:
     """取某账号启用中的爆款样本正文（做 few-shot 风格锚），最多 _FEWSHOT_MAX 条，最早在前保稳定。"""
     return list(
@@ -44,6 +48,12 @@ def _load_samples(db: Session, tone_id: str) -> list[str]:
             .limit(_FEWSHOT_MAX)
         )
     )
+
+
+def _fewshot_for(db: Session, tone_id: str, style_refs: list[str] | None) -> list[str]:
+    """合并 few-shot 风格锚：本次临时仿写范本（优先）+ 账号已有爆款样本，总量截断控 token。"""
+    ad_hoc = [s.strip() for s in (style_refs or []) if s and s.strip()][:_ADHOC_MAX]
+    return (ad_hoc + _load_samples(db, tone_id))[:_FEWSHOT_TOTAL]
 
 
 def _label(model_id: str) -> str:
@@ -110,7 +120,8 @@ def generate_variants(
 
         tone_dict = {"id": tone.id, "handle": tone.handle, "name": tone.name, "desc": tone.desc}
         news_ctx = body.news_context.model_dump() if body.news_context else None
-        samples = _load_samples(db, tone.id)
+        style_refs = [s.strip() for s in (body.style_refs or []) if s and s.strip()][:_ADHOC_MAX] or None
+        samples = _fewshot_for(db, tone.id, style_refs)
         try:
             batch, usages = run_pipeline(tone_dict, body.prompt, news=news_ctx, samples=samples)
         except Exception as ex:  # noqa: BLE001
@@ -131,6 +142,7 @@ def generate_variants(
             prompt=body.prompt,
             source_headline=body.source_headline,
             news_context=news_ctx,
+            style_refs=style_refs,
             diversity=batch["diversity"],
             created_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         )
@@ -167,6 +179,7 @@ def _session_out(db: Session, s: GenerationSession) -> GenerationSessionOut:
         prompt=s.prompt,
         source_headline=s.source_headline,
         news_context=s.news_context,
+        style_refs=s.style_refs,
         diversity=s.diversity,
         created_at=s.created_at,
         favorite=s.favorite,
@@ -324,13 +337,15 @@ def regenerate_variant(
         from ..pipeline.generate import regenerate_one
 
         tone_dict = {"id": tone.id, "handle": tone.handle, "name": tone.name, "desc": tone.desc}
-        # 复用原会话的事实底稿，使重生成仍贴合被引用新闻（无会话/未引用新闻则为 None）
+        # 复用原会话的事实底稿 + 临时仿写范本，使重生成仍贴合被引用新闻与仿写风格
         news_ctx = None
+        sess_style_refs = None
         if v.session_id:
             sess = db.get(GenerationSession, v.session_id)
             if sess is not None:
                 news_ctx = sess.news_context
-        samples = _load_samples(db, tone.id)
+                sess_style_refs = sess.style_refs
+        samples = _fewshot_for(db, tone.id, sess_style_refs)
         try:
             fields, usages = regenerate_one(tone_dict, body.prompt, v.dimensions, news=news_ctx, samples=samples)
         except Exception as ex:  # noqa: BLE001

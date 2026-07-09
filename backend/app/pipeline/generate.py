@@ -15,7 +15,7 @@ import json as _json
 import re
 
 from ..compliance import merge_status, scan_compliance, semantic_check_batch
-from ..llm import MODEL_SONNET, call_json, call_text
+from ..llm import call_json, call_text, scene_max_tokens, scene_spec, scene_temperature
 
 # 套路矩阵：从真实爆款提炼的「开场 × 正文」写法，保多样性并把生成往「人设文案」而非标题党带。
 # 字段沿用前端 VariantDimensions（hook/structure/emotion/cta），仅语义换成真实套路。
@@ -118,10 +118,11 @@ def _rewrite(tone: dict, body: str, reason: str, samples: list[str] | None = Non
     current = body
     for _ in range(_REWRITE_MAX):
         text, u = call_text(
-            MODEL_SONNET,
+            scene_spec("generate"),
             _gen_system(tone, samples),
             f"以下文案存在合规问题（{reason}），请改写以消除问题，保持人设语感与主题，只输出改写后的中文文案：\n{current}",
             max_tokens=600,
+            temperature=scene_temperature("generate"),
         )
         usages.append(u)
         current = text.strip()
@@ -142,7 +143,8 @@ def regenerate_one(
     usages: list[dict] = []
     dim_line = f"[0] 开场={dims.get('hook')} 正文={dims.get('structure')} 语气={dims.get('emotion')} 结尾={dims.get('cta')}"
     user = f"{_news_brief(news)}需求：{prompt}\n\n按以下写法写 1 条完整中文文案（换一个新表达，与以往不同）：\n{dim_line}"
-    raw, u = call_json(MODEL_SONNET, _gen_system(tone, samples), user, max_tokens=900)
+    raw, u = call_json(scene_spec("generate"), _gen_system(tone, samples), user,
+                       max_tokens=900, temperature=scene_temperature("generate"))
     usages.append(u)
     items = raw if isinstance(raw, list) else raw.get("variants", [])
     it = items[0] if items else {}
@@ -187,7 +189,8 @@ def generate_variants(
     k = min(k, len(_MATRIX))
     usages: list[dict] = []
 
-    raw, u = call_json(MODEL_SONNET, _gen_system(tone, samples), _gen_user(prompt, k, news), max_tokens=3600)
+    raw, u = call_json(scene_spec("generate"), _gen_system(tone, samples), _gen_user(prompt, k, news),
+                       max_tokens=scene_max_tokens("generate"), temperature=scene_temperature("generate"))
     usages.append(u)
     items = raw if isinstance(raw, list) else raw.get("variants", [])
 

@@ -4,10 +4,50 @@
  * mocks/ 保留仅作参考，不再被本文件引用。
  */
 import { apiFetch } from './http'
-import type { NewsItem, Tone, Variant, VariantBatch, GenerationSession, NewsContext, StyleSample, DashboardData, CrawlSource, QuotaConfig, UserQuota, LabelState } from '../types'
+import type { NewsItem, Tone, Variant, VariantBatch, GenerationSession, NewsContext, StyleSample, ModelConfig, LlmModel, Provider, DashboardData, CrawlSource, QuotaConfig, UserQuota, LabelState } from '../types'
 
 export function getTones(): Promise<Tone[]> {
   return apiFetch<Tone[]>('/tones')
+}
+
+// ===== 账号/调性管理（admin）=====
+export type ToneInput = Pick<Tone, 'handle' | 'name' | 'desc'>
+export function createTone(payload: ToneInput): Promise<Tone> {
+  return apiFetch<Tone>('/tones', { method: 'POST', body: JSON.stringify(payload) })
+}
+export function updateTone(id: string, patch: Partial<ToneInput>): Promise<Tone> {
+  return apiFetch<Tone>(`/tones/${id}`, { method: 'PUT', body: JSON.stringify(patch) })
+}
+export function deleteTone(id: string): Promise<{ ok: boolean }> {
+  return apiFetch<{ ok: boolean }>(`/tones/${id}`, { method: 'DELETE' })
+}
+
+// ===== 模型管理（admin）=====
+// 模型库（多厂商 CRUD）
+export function getLlmModels(): Promise<LlmModel[]> {
+  return apiFetch<LlmModel[]>('/llm-models')
+}
+export type LlmModelInput = { name: string; provider: Provider; modelId: string; baseUrl?: string | null; apiKey?: string | null }
+export function createLlmModel(payload: LlmModelInput): Promise<LlmModel> {
+  return apiFetch<LlmModel>('/llm-models', { method: 'POST', body: JSON.stringify(payload) })
+}
+export function updateLlmModel(id: string, patch: Partial<LlmModelInput> & { enabled?: boolean }): Promise<LlmModel> {
+  return apiFetch<LlmModel>(`/llm-models/${id}`, { method: 'PUT', body: JSON.stringify(patch) })
+}
+export function deleteLlmModel(id: string): Promise<{ ok: boolean }> {
+  return apiFetch<{ ok: boolean }>(`/llm-models/${id}`, { method: 'DELETE' })
+}
+export function verifyLlmModel(id: string): Promise<{ ok: boolean; model?: string; error?: string }> {
+  return apiFetch<{ ok: boolean; model?: string; error?: string }>(`/llm-models/${id}/verify`, { method: 'POST' })
+}
+
+// 场景绑定
+export function getModels(): Promise<ModelConfig[]> {
+  return apiFetch<ModelConfig[]>('/models')
+}
+export type ModelPatch = { modelId?: string; maxTokens?: number; temperature?: number | null; enabled?: boolean }
+export function updateModel(scene: string, patch: ModelPatch): Promise<ModelConfig> {
+  return apiFetch<ModelConfig>(`/models/${scene}`, { method: 'PUT', body: JSON.stringify(patch) })
 }
 
 // ===== 账号风格样本（往期爆款，few-shot 锚）=====
@@ -35,10 +75,11 @@ export function generateVariants(
   prompt: string,
   sourceHeadline?: string,
   newsContext?: NewsContext,
+  styleRefs?: string[],
 ): Promise<VariantBatch> {
   return apiFetch<VariantBatch>('/variants', {
     method: 'POST',
-    body: JSON.stringify({ toneId, prompt, sourceHeadline, newsContext }),
+    body: JSON.stringify({ toneId, prompt, sourceHeadline, newsContext, styleRefs }),
   })
 }
 
@@ -70,8 +111,35 @@ export function regenerateVariant(id: string, prompt: string): Promise<Variant> 
   return apiFetch<Variant>(`/variants/${id}/regenerate`, { method: 'POST', body: JSON.stringify({ prompt }) })
 }
 
-export function getNews(): Promise<NewsItem[]> {
-  return apiFetch<NewsItem[]>('/news')
+export interface NewsQuery {
+  q?: string
+  sources?: string[]
+  sort?: 'heat' | 'time'
+  onlyUnlabeled?: boolean
+  dateFrom?: string // YYYY-MM-DD
+  dateTo?: string // YYYY-MM-DD
+  limit?: number
+  offset?: number
+}
+
+export interface NewsPage {
+  items: NewsItem[]
+  total: number
+  sources: string[] // 全表来源，供筛选下拉（与分页无关）
+}
+
+/** 新闻库分页 + 服务端检索/筛选/排序。供下滑加载。 */
+export function getNews(params: NewsQuery = {}): Promise<NewsPage> {
+  const sp = new URLSearchParams()
+  if (params.q?.trim()) sp.set('q', params.q.trim())
+  ;(params.sources ?? []).forEach((s) => sp.append('source', s))
+  if (params.sort) sp.set('sort', params.sort)
+  if (params.onlyUnlabeled) sp.set('onlyUnlabeled', 'true')
+  if (params.dateFrom) sp.set('dateFrom', params.dateFrom)
+  if (params.dateTo) sp.set('dateTo', params.dateTo)
+  sp.set('limit', String(params.limit ?? 20))
+  sp.set('offset', String(params.offset ?? 0))
+  return apiFetch<NewsPage>(`/news?${sp.toString()}`)
 }
 
 /** 新闻打标落库（相关/不相关/取消）。返回更新后的新闻。editor/admin 均可。 */
@@ -151,6 +219,7 @@ export interface CrawlResult {
   fetched: number
   inserted: number
   skipped: number
+  filteredIrrelevant: number
   message: string
 }
 

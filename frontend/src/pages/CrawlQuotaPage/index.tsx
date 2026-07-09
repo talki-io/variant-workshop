@@ -10,7 +10,7 @@ import { getSources, getQuota, crawlSource, createSource, updateSource, deleteSo
 import type { CrawlSource, SourceType } from '../../types'
 import { brand } from '../../theme/tokens'
 
-const typeColor: Record<SourceType, string> = { RSS: 'orange', 搜索API: 'green', Playwright: 'purple' }
+const typeColor: Record<SourceType, string> = { RSS: 'orange', HTML: 'blue', 搜索API: 'green', Playwright: 'purple' }
 
 async function fetchAll() {
   const [sources, quota] = await Promise.all([getSources(), getQuota()])
@@ -45,7 +45,11 @@ export default function CrawlQuotaPage() {
   const handleCrawl = async (r: CrawlSource) => {
     try {
       const res = await crawlSource(r.id)
-      if (res.ok) message.success(`「${r.name}」抓取完成：新增 ${res.inserted}、去重 ${res.skipped}`)
+      if (res.ok)
+        message.success(
+          `「${r.name}」抓取完成：新增 ${res.inserted}、去重 ${res.skipped}` +
+            (res.filteredIrrelevant ? `、过滤无关 ${res.filteredIrrelevant}` : ''),
+        )
       else message.warning(`「${r.name}」${res.message}`)
     } catch (e) {
       message.error(e instanceof Error ? e.message : '抓取失败')
@@ -287,7 +291,7 @@ export default function CrawlQuotaPage() {
             <Input placeholder="如：行业资讯 RSS" />
           </Form.Item>
           <Form.Item label="类型" name="type" rules={[{ required: true }]}>
-            <Select options={[{ value: 'RSS' }, { value: '搜索API' }, { value: 'Playwright' }]} />
+            <Select options={[{ value: 'RSS' }, { value: 'HTML' }, { value: '搜索API' }, { value: 'Playwright' }]} />
           </Form.Item>
           <Form.Item label="URL" name="url" rules={[{ required: true }]}>
             <Input placeholder="https://…" />

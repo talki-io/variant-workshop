@@ -71,8 +71,10 @@ def test_tones_news_require_auth():
         assert c.get("/api/news").status_code == 401
         h = _headers(c, "editor")
         assert len(c.get("/api/tones", headers=h).json()) == 4
-        # 新闻表只由真实抓取填充（不再灌演示假数据），全新库可能为空——断言返回的是列表即可
-        assert isinstance(c.get("/api/news", headers=h).json(), list)
+        # 新闻库改为分页出参 {items,total,sources}；断言分页结构而非裸列表
+        page = c.get("/api/news", headers=h).json()
+        assert isinstance(page["items"], list)
+        assert isinstance(page["total"], int) and isinstance(page["sources"], list)
 
 
 def test_admin_only_endpoints_rbac():
@@ -106,13 +108,14 @@ def test_news_label_persists_and_restores():
     nid, created = _ensure_news()
     with TestClient(app) as c:
         h = _headers(c, "editor")
-        original = {n["id"]: n["label"] for n in c.get("/api/news", headers=h).json()}[nid]
+        with SessionLocal() as db:
+            original = db.get(News, nid).label
         try:
             r = c.put(f"/api/news/{nid}/label", headers=h, json={"label": "relevant"})
             assert r.status_code == 200 and r.json()["label"] == "relevant"
-            # 落库：重新读取仍为 relevant
-            again = {n["id"]: n for n in c.get("/api/news", headers=h).json()}
-            assert again[nid]["label"] == "relevant"
+            # 落库：直接查库确认持久化（分页 GET 可能不含该条，直接读更稳）
+            with SessionLocal() as db:
+                assert db.get(News, nid).label == "relevant"
         finally:
             c.put(f"/api/news/{nid}/label", headers=h, json={"label": original})
             _cleanup_news(created)
@@ -288,3 +291,116 @@ def test_style_samples_crud():
         assert c.delete(f"/api/samples/{sid}", headers=h).status_code == 200
         assert len(c.get("/api/tones/t1/samples", headers=h).json()) == base
         assert c.delete(f"/api/samples/{sid}", headers=h).status_code == 404
+
+
+# ===== 新闻库分页 / 检索 =====
+def test_news_pagination_and_search():
+    from app.db import SessionLocal
+    from app.models import News
+
+    ids = [f"n_pgtest_{i}" for i in range(5)]
+    with SessionLocal() as db:
+        for i, nid in enumerate(ids):
+            db.add(News(
+                id=nid, headline=f"分页测试新闻 KEYWORDX {i}", source=f"pgsrc{i % 2}",
+                published_at=f"2026-07-0{i + 1}T10:00:00+07:00", published_label="x", freshness="old",
+                heat=i * 10, key_facts=[], tickers=[], angle_hints=[],
+                url=f"https://test.local/pg{i}", label="none",
+            ))
+        db.commit()
+    try:
+        with TestClient(app) as c:
+            h = _headers(c, "editor")
+            # limit/offset 分页 + total 稳定
+            p1 = c.get("/api/news?q=KEYWORDX&limit=2&offset=0", headers=h).json()
+            assert p1["total"] == 5 and len(p1["items"]) == 2
+            p2 = c.get("/api/news?q=KEYWORDX&limit=2&offset=2", headers=h).json()
+            assert len(p2["items"]) == 2
+            assert {n["id"] for n in p1["items"]}.isdisjoint({n["id"] for n in p2["items"]})
+            # 搜索：命中数正确；无关关键词 0 命中
+            assert c.get("/api/news?q=KEYWORDX&limit=50", headers=h).json()["total"] == 5
+            assert c.get("/api/news?q=不存在的词ZZZ", headers=h).json()["total"] == 0
+            # 来源筛选
+            assert c.get("/api/news?q=KEYWORDX&source=pgsrc0&limit=50", headers=h).json()["total"] == 3
+            # 时间排序：published_at 降序（最新在前）
+            times = [n["publishedAt"] for n in c.get("/api/news?q=KEYWORDX&sort=time&limit=50", headers=h).json()["items"]]
+            assert times == sorted(times, reverse=True)
+            # 热度排序：heat 降序
+            heats = [n["heat"] for n in c.get("/api/news?q=KEYWORDX&sort=heat&limit=50", headers=h).json()["items"]]
+            assert heats == sorted(heats, reverse=True)
+    finally:
+        with SessionLocal() as db:
+            for nid in ids:
+                row = db.get(News, nid)
+                if row:
+                    db.delete(row)
+            db.commit()
+
+
+# ===== 账号/调性管理 + 模型管理 =====
+def test_tone_crud_admin_only():
+    with TestClient(app) as c:
+        eh = _headers(c, "editor")
+        ah = _headers(c, "admin")
+        assert c.post("/api/tones", headers=eh, json={"handle": "@x", "name": "x", "desc": "x"}).status_code == 403
+        r = c.post("/api/tones", headers=ah, json={"handle": "@t", "name": "测试账号", "desc": "短句"})
+        assert r.status_code == 201
+        tid = r.json()["id"]
+        try:
+            assert c.post("/api/tones", headers=ah, json={"handle": " ", "name": " ", "desc": ""}).status_code == 422
+            upd = c.put(f"/api/tones/{tid}", headers=ah, json={"name": "改名"})
+            assert upd.status_code == 200 and upd.json()["name"] == "改名"
+            assert tid in {t["id"] for t in c.get("/api/tones", headers=eh).json()}
+        finally:
+            assert c.delete(f"/api/tones/{tid}", headers=ah).json()["ok"] is True
+        assert c.put(f"/api/tones/{tid}", headers=ah, json={"name": "z"}).status_code == 404
+
+
+def test_model_config_admin_only_and_restores():
+    with TestClient(app) as c:
+        eh = _headers(c, "editor")
+        ah = _headers(c, "admin")
+        assert c.get("/api/models", headers=eh).status_code == 403
+        rows = c.get("/api/models", headers=ah).json()
+        scenes = {m["scene"] for m in rows}
+        assert {"generate", "clean", "compliance"} <= scenes
+        orig = next(m for m in rows if m["scene"] == "generate")
+        try:
+            r = c.put("/api/models/generate", headers=ah, json={"maxTokens": 3000, "temperature": 0.5})
+            assert r.status_code == 200 and r.json()["maxTokens"] == 3000 and r.json()["temperature"] == 0.5
+            assert c.put("/api/models/generate", headers=ah, json={"maxTokens": 999999}).status_code == 422
+            assert c.put("/api/models/nope", headers=ah, json={"maxTokens": 100}).status_code == 404
+            assert len(c.get("/api/llm-models", headers=ah).json()) >= 3
+        finally:
+            c.put("/api/models/generate", headers=ah,
+                  json={"modelId": orig["modelId"], "maxTokens": orig["maxTokens"], "temperature": orig["temperature"]})
+
+
+# ===== 模型库（多厂商）CRUD + 场景绑定守卫 =====
+def test_llm_model_library_crud():
+    with TestClient(app) as c:
+        eh = _headers(c, "editor")
+        ah = _headers(c, "admin")
+        assert c.get("/api/llm-models", headers=eh).status_code == 403  # 仅 admin
+        base = len(c.get("/api/llm-models", headers=ah).json())
+        assert base >= 3  # 默认 3 个 Anthropic
+        # 新增 OpenAI 兼容模型
+        r = c.post("/api/llm-models", headers=ah,
+                   json={"name": "DeepSeek", "provider": "openai", "modelId": "deepseek-chat",
+                         "baseUrl": "https://api.deepseek.com/v1", "apiKey": "sk-x"})
+        assert r.status_code == 201 and r.json()["hasKey"] is True and "apiKey" not in r.json()  # 脱敏
+        mid = r.json()["id"]
+        try:
+            # 校验：provider 非法 / openai 缺 base_url
+            assert c.post("/api/llm-models", headers=ah, json={"name": "x", "provider": "bad", "modelId": "x"}).status_code == 422
+            assert c.post("/api/llm-models", headers=ah, json={"name": "x", "provider": "openai", "modelId": "x"}).status_code == 422
+            # 场景改绑到新模型
+            assert c.put("/api/models/generate", headers=ah, json={"modelId": mid}).status_code == 200
+            # 被绑时不可删 → 409
+            assert c.delete(f"/api/llm-models/{mid}", headers=ah).status_code == 409
+            # 绑不存在的模型 → 422
+            assert c.put("/api/models/generate", headers=ah, json={"modelId": "ghost"}).status_code == 422
+        finally:
+            c.put("/api/models/generate", headers=ah, json={"modelId": "mdl_sonnet"})
+            assert c.delete(f"/api/llm-models/{mid}", headers=ah).json()["ok"] is True
+        assert len(c.get("/api/llm-models", headers=ah).json()) == base

@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .db import SessionLocal
-from .routers import auth, compliance, dashboard, news, quota, sources, telemetry, tones, variants
+from .routers import auth, compliance, dashboard, models, news, quota, sources, telemetry, tones, variants
 from .seed import seed
 
 # 默认/占位密钥值——若线上用这些则拒绝安全承诺（§7 P1-4）。
@@ -25,9 +25,12 @@ async def lifespan(app: FastAPI):
     # 1) 用 Alembic 迁移建/升级 schema（迁移里已含 CREATE EXTENSION vector）。
     #    单一事实来源，替代旧的 create_all。
     command.upgrade(AlembicConfig("alembic.ini"), "head")
-    # 2) 幂等灌假数据
+    # 2) 幂等灌假数据 + 载入模型场景配置到进程缓存
     with SessionLocal() as db:
         seed(db)
+        from .llm import refresh_model_config
+
+        refresh_model_config(db)
     # 3) 可选：启用 M1 定时抓取
     if settings.crawl_scheduler_enabled:
         from .scheduler import start_scheduler
@@ -47,7 +50,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for r in (auth, tones, variants, news, dashboard, sources, quota, compliance, telemetry):
+for r in (auth, tones, variants, news, dashboard, sources, quota, compliance, telemetry, models):
     app.include_router(r.router)
 
 

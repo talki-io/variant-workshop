@@ -12,6 +12,8 @@ const GeneratePage = lazy(() => import('./pages/GeneratePage'))
 const NewsPage = lazy(() => import('./pages/NewsPage'))
 const DashboardPage = lazy(() => import('./pages/DashboardPage'))
 const CrawlQuotaPage = lazy(() => import('./pages/CrawlQuotaPage'))
+const AccountsPage = lazy(() => import('./pages/AccountsPage'))
+const ModelsPage = lazy(() => import('./pages/ModelsPage'))
 const ComponentsPage = lazy(() => import('./pages/ComponentsPage'))
 
 function PageFallback() {
@@ -52,6 +54,22 @@ export default function App() {
               element={
                 <RequireAdmin>
                   <CrawlQuotaPage />
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="/accounts"
+              element={
+                <RequireAdmin>
+                  <AccountsPage />
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="/models"
+              element={
+                <RequireAdmin>
+                  <ModelsPage />
                 </RequireAdmin>
               }
             />

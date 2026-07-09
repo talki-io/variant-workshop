@@ -21,7 +21,7 @@ from ..usage import RATES, record_usage
 
 router = APIRouter(prefix="/api", tags=["sources"], dependencies=[Depends(require_admin)])
 
-_TYPES = {"RSS", "搜索API", "Playwright"}
+_TYPES = {"RSS", "HTML", "搜索API", "Playwright"}
 
 
 @router.get("/sources", response_model=list[CrawlSourceOut])
@@ -96,7 +96,11 @@ def crawl_source(source_id: str, db: Session = Depends(get_db)) -> CrawlResultOu
             detail="搜索API 源类型尚未实现（需接入具体搜索服务，属下一轮）",
         )
     enrich = settings.use_real_llm and bool(settings.anthropic_api_key)
-    if src.type == "Playwright":
+    if src.type == "HTML":
+        from ..crawl_html import fetch_html_and_ingest
+
+        result = fetch_html_and_ingest(db, src.name, src.url, enrich=enrich)
+    elif src.type == "Playwright":
         from ..crawl_playwright import fetch_playwright_and_ingest
 
         result = fetch_playwright_and_ingest(db, src.name, src.url, enrich=enrich)
@@ -122,5 +126,6 @@ def crawl_source(source_id: str, db: Session = Depends(get_db)) -> CrawlResultOu
         fetched=result["fetched"],
         inserted=result["inserted"],
         skipped=result["skipped"],
+        filtered_irrelevant=result.get("filtered_irrelevant", 0),
         message=result["message"],
     )

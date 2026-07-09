@@ -16,6 +16,32 @@ export interface Tone {
   desc: string // 短句 · 大量俚语
 }
 
+// ===== 模型管理 =====
+export type Provider = 'anthropic' | 'openai'
+
+// 模型库：管理员维护的可用模型（多厂商）
+export interface LlmModel {
+  id: string
+  name: string
+  provider: Provider
+  modelId: string // 厂商裸模型串
+  baseUrl: string | null
+  hasKey: boolean // 是否已配密钥（不回显明文）
+  enabled: boolean
+  createdAt: string
+}
+
+// 场景绑定：generate/clean/compliance → 选模型库某模型 + 参数
+export interface ModelConfig {
+  scene: string // generate | clean | compliance
+  label: string // 中文场景名
+  modelId: string // → LlmModel.id
+  maxTokens: number
+  temperature: number | null
+  enabled: boolean
+  updatedAt: string
+}
+
 // ===== 变体 =====
 export type ComplianceStatus = 'pass' | 'soft' | 'blocked'
 // pass=合规✓  soft=软提示·待判断  blocked=禁词命中·已改写
@@ -64,6 +90,7 @@ export interface GenerationSession {
   prompt: string
   sourceHeadline?: string
   newsContext?: NewsContext // 引用新闻时的事实底稿（供恢复后重新生成仍贴事实）
+  styleRefs?: string[] // 本次临时仿写范本（供恢复后重新生成仍参照）
   diversity: number
   createdAt: string
   favorite: boolean
@@ -143,7 +170,7 @@ export interface DashboardData {
 }
 
 // ===== 抓取源 / 配额 =====
-export type SourceType = 'RSS' | '搜索API' | 'Playwright'
+export type SourceType = 'RSS' | 'HTML' | '搜索API' | 'Playwright'
 export type SourceHealth = 'ok' | 'error'
 
 export interface CrawlSource {

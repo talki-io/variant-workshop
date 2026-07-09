@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session
 
 from .models import (
     CrawlSource,
+    LlmModel,
+    ModelConfig,
     QuotaConfig,
     StyleSample,
     Tone,
@@ -86,12 +88,17 @@ def seed(db: Session) -> None:
             CrawlSource(id="s2", name="Detik Finance", type="RSS", url="https://finance.detik.com/rss", frequency="每 30 分钟", last_crawl="—", health="ok", enabled=True),
             # IDX：Playwright 渲染实测可抓真实官方新闻（.card-title 结构化抽取）；Cloudflare 偶发拦截会如实置 error，不造假。
             CrawlSource(id="s3", name="IDX 官网 · 新闻（Playwright JS 渲染）", type="Playwright", url="https://www.idx.co.id/en/news/news", frequency="每 60 分钟", last_crawl="—", health="ok", enabled=True),
-            CrawlSource(id="s4", name="Antara · 经济", type="RSS", url="https://www.antaranews.com/rss/ekonomi.xml", frequency="每 2 小时", last_crawl="—", health="ok", enabled=True),
-            CrawlSource(id="s5", name="Investing.com · 新闻", type="RSS", url="https://www.investing.com/rss/news_25.rss", frequency="每 60 分钟", last_crawl="—", health="ok", enabled=True),
+            # Antara/Investing 为泛经济/国际源，非印尼官方且股票密度低——默认禁用（相关性硬过滤已兜底，
+            # 但优先官方/精准源：IDX 官方 + IDNFinancials + CNBC 市场）。需要时可在「抓取源」页手动启用。
+            CrawlSource(id="s4", name="Antara · 经济", type="RSS", url="https://www.antaranews.com/rss/ekonomi.xml", frequency="每 2 小时", last_crawl="—", health="ok", enabled=False),
+            CrawlSource(id="s5", name="Investing.com · 新闻（国际源）", type="RSS", url="https://www.investing.com/rss/news_25.rss", frequency="每 60 分钟", last_crawl="—", health="ok", enabled=False),
             CrawlSource(id="s6", name="Stockbit 社区（Playwright JS 渲染）", type="Playwright", url="https://stockbit.com/", frequency="每 4 小时", last_crawl="—", health="ok", enabled=False),
             # 印尼 JS 站均被 Cloudflare/IP 信誉拦截（本机出口 IP 无法过挑战），默认禁用；
             # 需印尼住宅/授权出口或官方数据渠道方可启用（业务决策）。Playwright 能力本身已实现并实测可用。
             CrawlSource(id="s7", name="IDNFinancials · 新闻（Playwright JS 渲染）", type="Playwright", url="https://www.idnfinancials.com/news", frequency="每 60 分钟", last_crawl="—", health="ok", enabled=False),
+            # 官方/专业精准源（用户点名接入）：Kontan 投资版 RSS（可直抓）+ OJK 官方新闻稿（SharePoint 服务端渲染、非 CF SPA，Playwright 抽 /siaran-pers/Pages 稿件）
+            CrawlSource(id="s8", name="Kontan · 投资", type="RSS", url="https://investasi.kontan.co.id/rss", frequency="每 30 分钟", last_crawl="—", health="ok", enabled=True),
+            CrawlSource(id="s9", name="OJK · 官方新闻稿（静态抓取）", type="HTML", url="https://www.ojk.go.id/id/berita-dan-kegiatan/siaran-pers/Default.aspx", frequency="每 4 小时", last_crawl="—", health="ok", enabled=True),
         ])
 
     # ---- 往期爆款样本（账号 t1 的风格锚，few-shot 用）----
@@ -101,6 +108,30 @@ def seed(db: Session) -> None:
             StyleSample(id=f"sm{i + 1}", tone_id="t1", body=body, source=source,
                         enabled=True, created_at=now)
             for i, (source, body) in enumerate(HOT_SAMPLES)
+        ])
+
+    # ---- 模型库：默认 3 个 Anthropic 模型（管理员可在「模型管理」页 CRUD 增补其他厂商）----
+    if _empty(db, LlmModel):
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        db.add_all([
+            LlmModel(id="mdl_haiku", name="Haiku 4.5（快·省）", provider="anthropic",
+                     model_id="claude-haiku-4-5", base_url=None, api_key=None, enabled=True, created_at=now),
+            LlmModel(id="mdl_sonnet", name="Sonnet 5（均衡·主力）", provider="anthropic",
+                     model_id="claude-sonnet-5", base_url=None, api_key=None, enabled=True, created_at=now),
+            LlmModel(id="mdl_opus", name="Opus 4.8（最强·贵）", provider="anthropic",
+                     model_id="claude-opus-4-8", base_url=None, api_key=None, enabled=True, created_at=now),
+        ])
+
+    # ---- 模型配置：各管线场景绑定模型库某模型 + 参数（可在「模型管理」页改）----
+    if _empty(db, ModelConfig):
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        db.add_all([
+            ModelConfig(scene="generate", label="文案生成", model_id="mdl_sonnet",
+                        max_tokens=3600, temperature=None, enabled=True, updated_at=now),
+            ModelConfig(scene="clean", label="新闻清洗富化", model_id="mdl_haiku",
+                        max_tokens=4000, temperature=None, enabled=True, updated_at=now),
+            ModelConfig(scene="compliance", label="语义合规", model_id="mdl_haiku",
+                        max_tokens=600, temperature=None, enabled=True, updated_at=now),
         ])
 
     # ---- 配额 ----

@@ -8,6 +8,8 @@ import {
   UserOutlined,
   DownOutlined,
   AppstoreOutlined,
+  TeamOutlined,
+  RobotOutlined,
 } from '@ant-design/icons'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
@@ -25,6 +27,8 @@ export default function AppSider({ collapsed = false }: { collapsed?: boolean })
     { key: '/news', icon: <ReadOutlined />, label: '新闻库' },
     ...(user?.role === 'admin'
       ? [
+          { key: '/accounts', icon: <TeamOutlined />, label: '账号管理' },
+          { key: '/models', icon: <RobotOutlined />, label: '模型管理' },
           { key: '/dashboard', icon: <LineChartOutlined />, label: '消耗看板' },
           { key: '/crawl-quota', icon: <DatabaseOutlined />, label: '抓取与配额' },
         ]

@@ -4,7 +4,7 @@
 语义层不可用时（无 key / 调用异常）降级为 pass，由规则层兜底——绝不因语义层故障放行更严的规则判定。
 """
 
-from ..llm import MODEL_HAIKU, call_json
+from ..llm import call_json, scene_max_tokens, scene_spec, scene_temperature
 
 _SYSTEM = (
     "你是印尼股市营销文案的合规审核员，依印尼 OJK 监管精神审查荐股/理财类文案。"
@@ -30,7 +30,9 @@ def semantic_check_batch(texts: list[str]) -> tuple[list[dict], dict | None]:
         return [], None
     numbered = "\n".join(f"[{i}] {t}" for i, t in enumerate(texts))
     try:
-        data, usage = call_json(MODEL_HAIKU, _SYSTEM, numbered, max_tokens=600)
+        data, usage = call_json(scene_spec("compliance"), _SYSTEM, numbered,
+                                max_tokens=scene_max_tokens("compliance"),
+                                temperature=scene_temperature("compliance"))
         # Haiku 偶尔把数组包在对象里（如 {"results":[...]}），取第一个列表值兜底
         if isinstance(data, dict):
             data = next((v for v in data.values() if isinstance(v, list)), [])

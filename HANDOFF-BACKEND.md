@@ -316,3 +316,45 @@ services 切真网络后，补齐各数据页的 loading/error/empty 三态，�
 3. Alembic 迁移、埋点 + bandit、密钥进 Secret Manager、配额/限流实际熔断。
 
 🔴 **红线不变（A-1）**：系统在 OJK 监管市场批量生产荐股营销内容，**正式对外投放前必须先拿到需求方法务书面确认**。开发/联调/内部试用不受限。
+
+---
+
+## 9. 迭代进展汇总（2026-07-08 ~ 09，最新交接）
+
+> 本段是 §1–§8 之后大量迭代的总览，后续接手先读这里。权威细节仍以代码为准；DESIGN.md 为设计基线。
+
+### 9.1 数据库迁移（新增）
+`0006` drop 废弃 user_quota｜`0007` generation_session.news_context｜`0008` style_sample（账号爆款样本）｜`0009` model_config（场景→模型配置）｜`0010` llm_model（多厂商模型库）+ model_config.model_id 改引用｜`0011` generation_session.style_refs（临时仿写范本）。启动 `main.py` lifespan 跑 `upgrade head` + seed + `refresh_model_config`。
+
+### 9.2 模型管理（多厂商，可动态 CRUD）
+- **两层**：`llm_model` 模型库（provider=anthropic 原生 / openai 兼容；model_id/base_url/api_key/enabled）+ `model_config` 场景绑定（generate/clean/compliance → 选库中模型 + max_tokens/temperature）。
+- `llm.py`：`ModelSpec` + 进程缓存 + `scene_spec/scene_max_tokens/scene_temperature`（DB 无则回退内置默认）+ **多 provider 分发**（`_call_anthropic` 原生 SDK / `_call_openai` httpx 调 `/chat/completions`，覆盖 OpenAI/DeepSeek/Kimi/Qwen/Gemini兼容/中转）+ `verify_model`。
+- 端点 `routers/models.py`（admin）：`GET/POST/PUT/DELETE /api/llm-models`（key 出参脱敏 hasKey、删除守卫：被场景绑定→409）+ `POST /api/llm-models/{id}/verify` + `GET /api/models`、`PUT /api/models/{scene}`（保存刷缓存即时生效）。
+- 前端 `pages/ModelsPage`（模型库 CRUD + 场景绑定两区）。
+
+### 9.3 账号/调性管理
+`Tone` CRUD：`POST/PUT/DELETE /api/tones`（admin，删账号级联删其 style_sample）。前端 `pages/AccountsPage`。侧栏加「账号管理」「模型管理」（admin）。
+
+### 9.4 文案生成（M5/M6）质变
+- **人设「文案物种」+ 账号爆款 few-shot**（`style_sample` 表，`_load_samples` 注入）：从"资讯标题党"变"第一人称过来人分享干货 + 软 CTA"。前端「参考爆款」抽屉管理样本；账号无样本则退化通用版。
+- **引用新闻 grounding**（`news_context`）：新闻作"引子"一句带过、不复述；持久化会话供恢复/重生成。
+- **仿写范本临时 few-shot**（`style_refs`）：对话框「仿写范本」就地录入（非弹窗，带脉冲启动动画），本次仿写、不入样本库、随会话存。
+- `_clean_body` 加固：解模型偶发的嵌套 JSON / 代码围栏，前端 `utils/text.ts` 展示层再兜底。
+- 输出语言：中文（面向印尼华语股民）。三层合规 + 重写循环不变。
+
+### 9.5 新闻采集/展示（M1/M3）
+- **分页 + 服务端检索**：`GET /api/news` → `{items,total,sources}`，支持 q/source/sort/onlyUnlabeled/dateFrom-To/limit/offset，默认排除 irrelevant。前端 `NewsPage` 无限滚动 + 服务端搜索。
+- **相关性硬过滤**：富化判 `relevant=False` 直接不入库（`ingest_entries`）+ 严格判定 prompt（只留印尼股票/上市公司相关）。
+- **相对时间实时**：`utils/time.ts::newsFreshness` 前端按当前时间算，弃用抓取时定格的 published_label。
+- **抓取库升级**：`feedparser`（RSS 专业解析）+ `beautifulsoup4/lxml`；新增 `crawl_html.py`（httpx+bs4 静态抓取，源类型 `HTML`），**OJK 从 Playwright 迁静态**。并发插入加 IntegrityError 逐条回退（防同源重复触发整批回滚）。
+- **源治理**：启用 = RSS(CNBC市场/Detik/Kontan投资) + HTML(OJK官方) + Playwright(IDX/IDNFinancials，CF 受限尽力而为)；禁用 Antara/Investing/Stockbit。
+
+### 9.6 依赖 / 运行
+- 新增 `feedparser==6.0.12`、`beautifulsoup4==4.15.0`、`lxml==6.1.1`（**镜像需 rebuild：`docker compose build backend`**，否则测试容器 ImportError）。另加 `anthropic`/`playwright`（已有）。
+- 起法不变：`cd backend && docker compose up -d`（DB :5433，API :8000）；前端 `npm run dev`（:5173）。演示账号 `admin`/`editor`（`demo1234`）。测试：`docker compose run --rm -e DATABASE_URL=…imitator_test -e USE_REAL_LLM=false -v "$PWD/tests:/app/tests" backend python -m pytest tests -q`（当前 **57 绿**）。
+
+### 9.7 已知边界（非 bug）
+- **IDX/IDNFinancials 被 Cloudflare 按出口 IP 拦截**（httpx/静态全 403，Playwright 偶尔过）→ 需官方 API 授权 / 印尼住宅授权出口 IP，**不做 CF 规避**。
+- **成本记账仍按 Anthropic 价目**（`variants._MODEL_LABEL` 按 model_id 子串映射）；接非 Anthropic 模型后成本估算不准（功能不受影响，待补单价配置）。
+- **生成质量上限**：无向量化语感指纹/模式库，few-shot 为"离线校准层"最小可用形态；styleDistance 近似占位、score/aiScore 模型自评。
+- 🔴 **红线 A-1 不变**：正式对外投放前需需求方法务书面确认。

@@ -88,6 +88,38 @@ body {
   box-shadow: 0 4px 12px rgba(37, 99, 235, 0.28);
 }
 
+/* —— 新闻卡片响应式（容器查询）——
+   宽容器：正文在左、热度+操作在右（保留原设计）；
+   窄容器（选中新闻→详情面板占位→列表变窄时）：热度+操作堆到正文下方并右对齐，
+   避免标题被挤成多行、按钮与热度条拥挤。 */
+.news-card-body {
+  container-type: inline-size;
+}
+.news-card-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px 24px;
+}
+.news-card-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.news-card-side {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+@container (max-width: 640px) {
+  .news-card-row {
+    flex-direction: column;
+  }
+  .news-card-side {
+    align-self: stretch;
+  }
+}
+
 /* 软提示句：黄色波浪下划线 */
 .soft-flag-underline {
   text-decoration: underline wavy #f59e0b;
@@ -109,9 +141,23 @@ body {
   animation: vw-page-in 0.32s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* —— 仿写范本「启动」脉冲：点按钮时输入框外扩一圈蓝光 —— */
+@keyframes vw-ref-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.45);
+  }
+  100% {
+    box-shadow: 0 0 0 12px rgba(37, 99, 235, 0);
+  }
+}
+.vw-ref-pulse {
+  animation: vw-ref-pulse 0.6s ease-out;
+}
+
 /* 尊重「减少动态效果」的系统偏好 */
 @media (prefers-reduced-motion: reduce) {
   .vw-page-enter,
+  .vw-ref-pulse,
   .lift-card,
   .ant-btn-primary {
     animation: none !important;

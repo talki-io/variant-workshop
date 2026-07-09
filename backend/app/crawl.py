@@ -23,6 +23,7 @@ from xml.etree import ElementTree as ET
 
 import httpx
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .compliance import sanitize_untrusted
@@ -81,43 +82,35 @@ def _parse_date(raw: str) -> datetime | None:
 
 
 def parse_feed(content: str | bytes) -> list[FeedEntry]:
-    """解析 RSS 2.0 或 Atom（含 description/content/summary）。解析失败返回空列表。
+    """用 feedparser 专业解析 RSS 2.0 / Atom（容错强、自动识别编码/日期/摘要/content:encoded）。
 
-    A6：按字节解析以尊重 XML 声明里的编码（印尼语源常见 non-utf8）。str 入参统一编码为 utf-8 字节。
+    比手写 xml.etree 更稳：兼容各站非规范 feed、内建日期解析、字段更全。失败返回空列表。
     """
-    raw = content.encode("utf-8") if isinstance(content, str) else content
-    try:
-        root = ET.fromstring(raw)
-    except ET.ParseError:
-        return []
+    import feedparser
 
+    d = feedparser.parse(content)  # bytes/str 皆可，内部按 XML 声明识别编码
     entries: list[FeedEntry] = []
-
-    # RSS 2.0: <rss><channel><item>
-    for item in root.findall(".//item"):
-        title = _clean_html(_text(item.find("title")))
-        link = _text(item.find("link"))
-        summary = _clean_html(
-            _text(item.find(_CONTENT_ENCODED)) or _text(item.find("description"))
-        )
-        dt = _parse_date(_text(item.find("pubDate")) or _text(item.find(_DC_DATE)))
+    for e in d.entries:
+        title = _clean_html(e.get("title", ""))
+        link = e.get("link", "")
+        # 摘要优先取 content:encoded（正文更全），回退 summary/description；清标签 + 截断控 token
+        summary = ""
+        if e.get("content"):
+            try:
+                summary = e["content"][0].get("value", "")
+            except (IndexError, AttributeError, TypeError):
+                summary = ""
+        summary = _clean_html(summary or e.get("summary") or e.get("description") or "")[:600]
+        # feedparser 已把日期归一化为 UTC struct_time
+        dt = None
+        pp = e.get("published_parsed") or e.get("updated_parsed")
+        if pp:
+            try:
+                dt = datetime(*pp[:6], tzinfo=timezone.utc)
+            except (TypeError, ValueError):
+                dt = None
         if title and link:
             entries.append(FeedEntry(title=title, link=link, published_at=dt, summary=summary))
-
-    # Atom: <feed><entry>
-    for entry in root.findall(f"{_ATOM}entry"):
-        title = _clean_html(_text(entry.find(f"{_ATOM}title")))
-        link_el = entry.find(f"{_ATOM}link")
-        link = link_el.get("href") if link_el is not None else ""
-        summary = _clean_html(
-            _text(entry.find(f"{_ATOM}summary")) or _text(entry.find(f"{_ATOM}content"))
-        )
-        dt = _parse_date(
-            _text(entry.find(f"{_ATOM}published")) or _text(entry.find(f"{_ATOM}updated"))
-        )
-        if title and link:
-            entries.append(FeedEntry(title=title, link=link, published_at=dt, summary=summary))
-
     return entries
 
 
@@ -185,26 +178,32 @@ def ingest_entries(db: Session, source_name: str, entries: list[FeedEntry], enri
     to_insert = [(nid, e) for nid, e in fresh if nid not in existing]
     skipped = (len(entries) - len(fresh)) + (len(fresh) - len(to_insert))
 
-    # E3：批量富化——多条一次 Haiku 调用（相关性 label 一并回填）
+    # E3：批量富化——多条一次 Haiku 调用（相关性一并判定）
     enrich_usage: list[dict] = []
     cards: list[dict] = []
+    degraded = False  # 富化失败降级：此时不做相关性硬过滤，避免误杀真新闻
     if enrich and to_insert:
         from .pipeline.clean import enrich_batch
 
         cards, usage = enrich_batch([(e.title, e.summary) for _, e in to_insert])
+        degraded = usage is None
         if usage:
             enrich_usage.append(usage)
 
-    inserted = 0
+    _EMPTY = {"relevant": True, "key_facts": [], "tickers": [], "angle_hints": [], "heat": 0}
+    filtered_irrelevant = 0
+    pending: list[News] = []
     for i, (nid, e) in enumerate(to_insert):
-        card = cards[i] if i < len(cards) else {
-            "relevant": True, "key_facts": [], "tickers": [], "angle_hints": [], "heat": 0
-        }
-        # A5：用富化的相关性回填 label；未富化则保持 none
-        label = "none"
-        if enrich:
-            label = "relevant" if card.get("relevant", True) else "irrelevant"
-        db.add(News(
+        card = cards[i] if i < len(cards) else _EMPTY
+        # —— 相关性硬过滤：正常富化下，判为「与印尼股票无关」的直接不入库 ——
+        if enrich and not degraded:
+            if not card.get("relevant", True):
+                filtered_irrelevant += 1
+                continue
+            label = "relevant"
+        else:
+            label = "none"  # 未富化 / 富化降级：保留待人工，不误杀
+        pending.append(News(
             id=nid,
             headline=sanitize_untrusted(e.title),   # 外部文本先中和注入片段
             source=source_name,
@@ -218,9 +217,34 @@ def ingest_entries(db: Session, source_name: str, entries: list[FeedEntry], enri
             url=e.link,
             label=label,
         ))
-        inserted += 1
-    db.commit()
-    return {"fetched": len(entries), "inserted": inserted, "skipped": skipped, "enrich_usage": enrich_usage}
+
+    # 入库：先试整批提交（快路径）；若与并发抓取撞主键（同源被重复触发），回退逐条插入跳过冲突，
+    # 不让一条重复毁掉整批（此前 UniqueViolation 会整批回滚 → inserted=0）。
+    for obj in pending:
+        db.add(obj)
+    try:
+        db.commit()
+        inserted = len(pending)
+    except IntegrityError:
+        db.rollback()
+        inserted = 0
+        for obj in pending:
+            try:
+                with db.begin_nested():
+                    db.add(obj)
+                    db.flush()
+                inserted += 1
+            except IntegrityError:
+                pass  # 已存在（并发/重复）→ 跳过
+        db.commit()
+    # skipped 计入去重 + 相关性过滤；单列 filtered 便于观测过滤强度
+    return {
+        "fetched": len(entries),
+        "inserted": inserted,
+        "skipped": skipped + filtered_irrelevant,
+        "filtered_irrelevant": filtered_irrelevant,
+        "enrich_usage": enrich_usage,
+    }
 
 
 def fetch_feed(

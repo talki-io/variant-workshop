@@ -30,6 +30,8 @@ SITE_CONFIGS: dict[str, dict] = {
                   "link": "a[href*='/news/news/']", "wait": ".card-title"},
     "idnfinancials.com": {"link_re": r"/news/\d+/", "wait": "a[href*='/news/']"},
     "stockbit.com": {"link_re": r"/(post|symbol)/[^\"']+", "wait": None},
+    # OJK 官方新闻稿：SharePoint 服务端渲染，稿件路径 /siaran-pers/Pages/<标题-slug>.aspx，标题即锚文本
+    "ojk.go.id": {"link_re": r"/siaran-pers/Pages/[^\"']+\.aspx", "wait": None},
 }
 _DEFAULT_CONFIG = {"link_re": r"/(news|berita|article|read|post)/[^\"']+", "wait": None}
 

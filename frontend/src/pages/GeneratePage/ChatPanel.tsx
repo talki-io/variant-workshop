@@ -1,5 +1,5 @@
 import { useState, useEffect, type KeyboardEvent } from 'react'
-import { Avatar, Button, Card, Tooltip, Input, App } from 'antd'
+import { Avatar, Button, Card, Tooltip, Input, App, Tag } from 'antd'
 import { Bubble } from '@ant-design/x'
 import {
   RobotOutlined,
@@ -8,6 +8,7 @@ import {
   SendOutlined,
   FileTextOutlined,
   FireOutlined,
+  SnippetsOutlined,
   ThunderboltOutlined,
   CommentOutlined,
   ScissorOutlined,
@@ -40,6 +41,9 @@ interface Props {
   onQuickAction: (label: string) => void
   /** 引用新闻：跳新闻库挑选 */
   onCiteNews: () => void
+  /** 本次临时仿写范本（贴一段爆款让 AI 仿写，走 few-shot，不入样本库） */
+  styleRefs: string[]
+  onStyleRefsChange: (refs: string[]) => void
 }
 
 const MAX_LEN = 1000
@@ -62,12 +66,30 @@ export default function ChatPanel({
   generating,
   onQuickAction,
   onCiteNews,
+  styleRefs,
+  onStyleRefsChange,
 }: Props) {
   const { message } = App.useApp()
   const canSend = !!toneId && !!input.trim() && !generating
   const currentTone = tones.find((t) => t.id === toneId)
   const [sampleOpen, setSampleOpen] = useState(false)
   const [sampleCount, setSampleCount] = useState<number | null>(null)
+  const [refMode, setRefMode] = useState(false) // 仿写范本录入模式：就地在输入框输入
+  const [pulse, setPulse] = useState(false) // 点按钮时的启动动画
+
+  const toggleRefMode = () => {
+    setRefMode((m) => !m)
+    setPulse(true) // 触发一次启动脉冲动画
+  }
+  // 把当前输入框内容收作一条仿写范本（refMode 下 Enter / 完成录入触发）
+  const addRefFromInput = () => {
+    const t = input.trim()
+    if (!t) return
+    if (styleRefs.length >= 3) { message.warning('最多 3 段仿写范本'); return }
+    onStyleRefsChange([...styleRefs, t])
+    onInput('')
+  }
+  const removeRef = (i: number) => onStyleRefsChange(styleRefs.filter((_, idx) => idx !== i))
 
   // 参考爆款计数：切换账号时刷新，显示在按钮上
   useEffect(() => {
@@ -90,11 +112,10 @@ export default function ChatPanel({
   }
 
   const handleEnter = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    // Enter 发送，Shift+Enter 换行
-    if (!e.shiftKey) {
-      e.preventDefault()
-      submit()
-    }
+    if (e.shiftKey) return // Shift+Enter 换行
+    e.preventDefault()
+    if (refMode) addRefFromInput() // 录范本模式：Enter 添加一段
+    else submit() // 普通模式：Enter 发送
   }
 
   return (
@@ -162,14 +183,17 @@ export default function ChatPanel({
         ))}
       </div>
 
-      {/* 输入框（对齐设计图：工具栏 → 输入区 → 底部计数 + 发送） */}
+      {/* 输入框（工具栏 → [仿写范本条] → 输入区 → 底部）。refMode 高亮 + 点按钮脉冲动画 */}
       <div
+        className={pulse ? 'vw-ref-pulse' : undefined}
+        onAnimationEnd={() => setPulse(false)}
         style={{
           marginTop: 12,
-          border: `1px solid ${brand.border}`,
+          border: `1px solid ${refMode ? brand.primary : brand.border}`,
           borderRadius: 12,
           padding: 12,
           background: '#fff',
+          transition: 'border-color .2s',
         }}
       >
         {/* 工具栏 */}
@@ -198,7 +222,37 @@ export default function ChatPanel({
               参考爆款{sampleCount != null ? ` (${sampleCount})` : ''}
             </Button>
           </Tooltip>
+          <Tooltip title="仿写范本：点亮后直接在下方输入框贴文案、Enter 添加，本次照它的风格仿写（临时·不入样本库）">
+            <Button
+              size="small"
+              icon={<SnippetsOutlined />}
+              type={refMode ? 'primary' : 'default'}
+              onClick={toggleRefMode}
+            >
+              仿写范本{styleRefs.length ? ` (${styleRefs.length})` : ''}
+            </Button>
+          </Tooltip>
         </div>
+
+        {/* 仿写范本条：录入提示 + 已加范本 chips（refMode 或已有范本时显示） */}
+        {(refMode || styleRefs.length > 0) && (
+          <div style={{ marginBottom: 8 }}>
+            {refMode && (
+              <div style={{ fontSize: 12, color: brand.primary, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <SnippetsOutlined /> 仿写范本录入中：在下方贴文案、Enter 添加（最多 3 段），点上方「仿写范本」或「完成录入」退出
+              </div>
+            )}
+            {styleRefs.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {styleRefs.map((r, i) => (
+                  <Tag key={i} closable onClose={() => removeRef(i)} color="blue" bordered={false} style={{ maxWidth: 280, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    仿写{i + 1}：{r.length > 18 ? `${r.slice(0, 18)}…` : r}
+                  </Tag>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* 输入区 */}
         <Input.TextArea
@@ -206,21 +260,31 @@ export default function ChatPanel({
           onChange={(e) => onInput(e.target.value)}
           onPressEnter={handleEnter}
           disabled={!toneId}
-          maxLength={MAX_LEN}
+          maxLength={refMode ? 2000 : MAX_LEN}
           autoSize={{ minRows: 3, maxRows: 8 }}
           variant="borderless"
-          placeholder={toneId ? '输入你的需求，越具体越好…' : '请先在上方选择账号/调性'}
+          placeholder={
+            !toneId ? '请先在上方选择账号/调性'
+              : refMode ? '粘贴要仿写的爆款文案，Enter 添加为范本…'
+                : '输入你的需求，越具体越好…'
+          }
           style={{ padding: 0, resize: 'none' }}
         />
 
-        {/* 底部：计数 + 发送 */}
+        {/* 底部：计数 + 发送/完成录入 */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
           <span style={{ fontSize: 12, color: brand.textSecondary }}>
-            {input.length}/{MAX_LEN}
+            {refMode ? `仿写范本 ${styleRefs.length}/3 段` : `${input.length}/${MAX_LEN}`}
           </span>
-          <Button type="primary" icon={<SendOutlined />} loading={generating} disabled={!canSend} onClick={submit}>
-            发送
-          </Button>
+          {refMode ? (
+            <Button icon={<CheckOutlined />} onClick={() => { setRefMode(false); setPulse(true) }}>
+              完成录入
+            </Button>
+          ) : (
+            <Button type="primary" icon={<SendOutlined />} loading={generating} disabled={!canSend} onClick={submit}>
+              发送
+            </Button>
+          )}
         </div>
       </div>
 
@@ -231,6 +295,7 @@ export default function ChatPanel({
         tone={currentTone}
         onChange={setSampleCount}
       />
+
     </Card>
   )
 }

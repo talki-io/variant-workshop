@@ -30,12 +30,78 @@ class LoginOut(CamelModel):
     user: UserOut
 
 
-# ===== 调性 =====
+# ===== 调性 / 账号 =====
 class ToneOut(CamelModel):
     id: str
     handle: str
     name: str
     desc: str
+
+
+class ToneCreateIn(CamelModel):
+    handle: str
+    name: str
+    desc: str
+
+
+class ToneUpdateIn(CamelModel):
+    handle: str | None = None
+    name: str | None = None
+    desc: str | None = None
+
+
+# ===== 模型管理 =====
+# 模型库（多厂商，管理员 CRUD）
+class LlmModelOut(CamelModel):
+    id: str
+    name: str
+    provider: str  # anthropic | openai
+    model_id: str
+    base_url: str | None = None
+    has_key: bool = False  # 是否已配密钥（不回显明文）
+    enabled: bool
+    created_at: str
+
+
+class LlmModelCreateIn(CamelModel):
+    name: str
+    provider: str
+    model_id: str
+    base_url: str | None = None
+    api_key: str | None = None
+
+
+class LlmModelUpdateIn(CamelModel):
+    name: str | None = None
+    provider: str | None = None
+    model_id: str | None = None
+    base_url: str | None = None
+    api_key: str | None = None  # 传则更新（空串=清空）；不传=保持
+    enabled: bool | None = None
+
+
+# 场景绑定（generate/clean/compliance → 选模型库某模型 + 参数）
+class ModelConfigOut(CamelModel):
+    scene: str
+    label: str
+    model_id: str  # → llm_model.id
+    max_tokens: int
+    temperature: float | None = None
+    enabled: bool
+    updated_at: str
+
+
+class ModelConfigUpdateIn(CamelModel):
+    model_id: str | None = None
+    max_tokens: int | None = None
+    temperature: float | None = None
+    enabled: bool | None = None
+
+
+class ModelVerifyOut(CamelModel):
+    ok: bool
+    model: str | None = None
+    error: str | None = None
 
 
 # ===== 账号风格样本（往期爆款，few-shot 锚）=====
@@ -92,6 +158,7 @@ class GenerateIn(CamelModel):
     prompt: str
     source_headline: str | None = None  # 引用新闻生成时带上，便于历史展示
     news_context: NewsContext | None = None  # 引用新闻的结构化事实底稿（喂给模型 grounding）
+    style_refs: list[str] | None = None  # 本次临时仿写范本（贴一段爆款让 AI 仿写，走 few-shot，不入样本库）
 
 
 class GenerationSessionOut(CamelModel):
@@ -102,6 +169,7 @@ class GenerationSessionOut(CamelModel):
     prompt: str
     source_headline: str | None = None
     news_context: NewsContext | None = None  # 供恢复会话后「重新生成」仍贴事实
+    style_refs: list[str] | None = None  # 本次临时仿写范本（恢复会话/重生成复用）
     diversity: float
     created_at: str
     favorite: bool = False
@@ -134,6 +202,14 @@ class NewsOut(CamelModel):
     angle_hints: list[str]
     url: str
     label: str
+
+
+class NewsPageOut(CamelModel):
+    """新闻库分页出参：当前页 items + 命中总数 total + 全表来源列表（供筛选下拉）。"""
+
+    items: list[NewsOut]
+    total: int
+    sources: list[str]
 
 
 class NewsLabelIn(CamelModel):
@@ -300,4 +376,5 @@ class CrawlResultOut(CamelModel):
     fetched: int
     inserted: int
     skipped: int
+    filtered_irrelevant: int = 0  # 相关性硬过滤掉的「与股票无关」条数
     message: str
