@@ -2,7 +2,7 @@
 
 单机 Docker Compose 生产部署。为什么不是 K8s / 多副本 → [`docs/decisions/0004-deployment-single-node-compose.md`](../docs/decisions/0004-deployment-single-node-compose.md)。
 
-服务器上装了宝塔面板 → 先读本文了解栈本身，再看 [`baota.md`](baota.md)（两层 Nginx 怎么摆、代理超时、大陆网络下的中转配置）。
+**线上环境已部署**：`https://sahamdata.top`（AWS EC2 + Caddy）。实际部署步骤、Caddyfile、以及踩过的坑 → [`aws-caddy.md`](aws-caddy.md)。
 
 > 🔴 **红线 A-1**：本手册覆盖的是**把系统跑起来供内部试用**。
 > 系统本身没有任何对外发布端点——A-1 约束的是「人拿产出的文案去对外投放」，那一步仍需需求方法务书面确认。
