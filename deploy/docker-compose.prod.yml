@@ -1,0 +1,99 @@
+# 生产编排（单机）。用法见 deploy/README.md。
+#
+#   docker compose -f deploy/docker-compose.prod.yml up -d --build
+#
+# 与 backend/docker-compose.yml（开发）的区别：
+#   - 代码烤进镜像，无 bind-mount、无 --reload
+#   - db 不映射宿主端口，只在 compose 内网可达
+#   - 只有 frontend 的 nginx 对外，默认还只绑 127.0.0.1
+#   - restart / healthcheck / 日志轮转 / 资源上限齐全
+#
+# ⚠️ 绝不要对这个栈跑 `docker compose down -v`：卷里是真实抓取的新闻和迁移状态。
+name: variant-workshop-prod
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER 未设置，见 deploy/.env.example}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 未设置，见 deploy/.env.example}
+      POSTGRES_DB: ${POSTGRES_DB:-imitator}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # 不映射宿主端口——只有同网络的 backend 需要连它。
+    # 要用 psql 排查：docker compose -f deploy/docker-compose.prod.yml exec db psql -U $POSTGRES_USER imitator
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.prod
+    restart: unless-stopped
+    # .env 同时是 compose 的插值源和后端的环境变量来源（见 deploy/.env.example）。
+    env_file: .env
+    environment:
+      # DATABASE_URL 在这里组装，密码只在 .env 里存一份，避免两处不同步。
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-imitator}
+      # 生产硬关演示数据：否则空库首启会建 admin/editor，密码都是 demo1234。
+      # 管理员用 `exec backend python -m app.create_admin <用户名>` 建。
+      SEED_DEMO_DATA: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+    # 不映射宿主端口——外部流量一律经 frontend 的 nginx 反代 /api 进来。
+    # Playwright 的 Chromium 用 /dev/shm 渲染，默认 64m 会让它在重页面上崩。
+    shm_size: 1gb
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      # ⚠️ 必须是 1。lifespan 每进程跑 `alembic upgrade head` 并启动进程内
+      # APScheduler；多实例 = 并发迁移竞争 + 定时抓取重复执行、重复烧 token。
+      # 扩容前提见 docs/decisions/0004-deployment-single-node-compose.md。
+      replicas: 1
+      resources:
+        limits:
+          memory: 4g
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      # 默认只绑回环：本机 curl / SSH 隧道可达，公网不可达。
+      # 要对外暴露，把 .env 里的 HTTP_BIND 改成 0.0.0.0:8080，并且**先在前面放一层
+      # 带 TLS 的反代**（Caddy/Nginx/云 LB）——这个栈本身不终结 HTTPS。
+      - "${HTTP_BIND:-127.0.0.1:8080}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+volumes:
+  pgdata:

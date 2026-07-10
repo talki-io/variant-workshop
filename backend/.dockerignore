@@ -1,0 +1,18 @@
+# .env 含真实 ANTHROPIC_API_KEY / JWT_SECRET —— 绝不进镜像。
+# （Dockerfile.prod 只 COPY app/ alembic.ini migrations/，本文件是第二道保险。）
+.env
+.env.*
+!.env.example
+
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+tests/
+Dockerfile
+Dockerfile.prod
+.dockerignore
+docker-compose.yml
