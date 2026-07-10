@@ -105,9 +105,13 @@ export default function LoginPage() {
               </Button>
             </Form.Item>
           </Form>
-          <p style={{ textAlign: 'center', color: brand.textSecondary, marginTop: 16, fontSize: 12 }}>
-            演示账号：<b>admin</b> / <b>editor</b>（密码均为 <b>demo1234</b>）
-          </p>
+          {/* 仅开发期显示：生产 SEED_DEMO_DATA=false，这两个账号根本不存在，
+              显示出来既误导用户，也等于对外宣告系统有 demo 账号。生产构建会摇除。 */}
+          {import.meta.env.DEV && (
+            <p style={{ textAlign: 'center', color: brand.textSecondary, marginTop: 16, fontSize: 12 }}>
+              演示账号：<b>admin</b> / <b>editor</b>（密码均为 <b>demo1234</b>）
+            </p>
+          )}
         </div>
         <p style={{ color: brand.textSecondary, marginTop: 24, fontSize: 13 }}>
           内部工具 · 仅授权账号访问
