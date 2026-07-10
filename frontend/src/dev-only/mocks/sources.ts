@@ -1,4 +1,4 @@
-import type { CrawlSource, QuotaConfig, UserQuota } from '../types'
+import type { CrawlSource, QuotaConfig, UserQuota } from '../../types'
 
 export const sources: CrawlSource[] = [
   { id: 's1', name: '行业资讯 RSS', type: 'RSS', url: 'https://example.com/rss/industry.xml', frequency: '每 15 分钟', lastCrawl: '2025-05-10 10:28', health: 'ok', enabled: true },

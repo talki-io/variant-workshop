@@ -1,20 +1,5 @@
-# ---- Node / frontend ----
-node_modules/
-dist/
-dist-ssr/
-*.local
-.vite/
-
-# ---- Python / backend ----
-__pycache__/
-*.py[cod]
-*.egg-info/
-.venv/
-venv/
-env/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
+# 仓库级公共规则（跨子项目共用）。
+# 子项目独有规则见 backend/.gitignore 与 frontend/.gitignore —— 不要在此重复。
 
 # ---- Secrets / env ----
 .env
@@ -38,6 +23,3 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
-
-# ---- Stray build/screenshot artifacts ----
-/--full-page

@@ -14,7 +14,12 @@ const DashboardPage = lazy(() => import('./pages/DashboardPage'))
 const CrawlQuotaPage = lazy(() => import('./pages/CrawlQuotaPage'))
 const AccountsPage = lazy(() => import('./pages/AccountsPage'))
 const ModelsPage = lazy(() => import('./pages/ModelsPage'))
-const ComponentsPage = lazy(() => import('./pages/ComponentsPage'))
+// 组件走查页只用于开发期视觉回归，是全项目唯一依赖 dev-only/mocks 假数据的入口。
+// import.meta.env.DEV 在生产构建中被静态替换为 false，该分支连同动态 import 一并被摇除，
+// mock 数据因此不会进入生产产物。
+const ComponentsPage = import.meta.env.DEV
+  ? lazy(() => import('./dev-only/ComponentsPage'))
+  : null
 
 function PageFallback() {
   return (
@@ -73,7 +78,7 @@ export default function App() {
                 </RequireAdmin>
               }
             />
-            <Route path="/components" element={<ComponentsPage />} />
+            {ComponentsPage && <Route path="/components" element={<ComponentsPage />} />}
           </Route>
           <Route path="*" element={<Navigate to="/generate" replace />} />
         </Routes>

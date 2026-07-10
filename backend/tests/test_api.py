@@ -90,7 +90,7 @@ def test_response_shapes_are_camel():
     with TestClient(app) as c:
         ah = _headers(c, "admin")
         sources = c.get("/api/sources", headers=ah).json()
-        # 种子源已换成真实 RSS/Playwright 源（见 HANDOFF §7j）
+        # 种子源已换成真实 RSS/Playwright 源
         assert "RSS" in {s["type"] for s in sources}
         assert "lastCrawl" in sources[0]
         quota = c.get("/api/quota", headers=ah).json()
@@ -101,7 +101,7 @@ def test_response_shapes_are_camel():
         assert "todayTokens" in dash["kpi"]
 
 
-# ===== 写回端点（HANDOFF-FIXME §1）=====
+# ===== 写回端点 =====
 
 
 def test_news_label_persists_and_restores():

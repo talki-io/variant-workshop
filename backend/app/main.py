@@ -20,7 +20,7 @@ async def lifespan(app: FastAPI):
     # 0) 密钥卫士：用占位/默认 JWT_SECRET 时高声告警（生产务必换强随机值，走 Secret Manager）。
     if settings.jwt_secret in _INSECURE_SECRETS:
         logging.getLogger("uvicorn.error").warning(
-            "⚠️ JWT_SECRET 使用了默认/占位值。生产环境必须改为强随机密钥并经 Secret Manager 注入（见 .env.example / HANDOFF-BACKEND §7）。"
+            "⚠️ JWT_SECRET 使用了默认/占位值。生产环境必须改为强随机密钥并经 Secret Manager 注入（见 .env.example / docs/development-guide.md §3）。"
         )
     # 1) 用 Alembic 迁移建/升级 schema（迁移里已含 CREATE EXTENSION vector）。
     #    单一事实来源，替代旧的 create_all。

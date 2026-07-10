@@ -1,4 +1,4 @@
-import type { VariantBatch } from '../types'
+import type { VariantBatch } from '../../types'
 
 export const variantBatch: VariantBatch = {
   toneId: 't1',

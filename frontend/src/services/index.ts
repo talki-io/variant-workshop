@@ -1,7 +1,7 @@
 /**
  * Service 层：页面只依赖这里的 async 函数。
  * 已由 mock 切到真实 FastAPI（经 http.ts / Vite 代理），页面零改动。
- * mocks/ 保留仅作参考，不再被本文件引用。
+ * 假数据已隔离至 dev-only/mocks/，仅供开发期组件走查页使用；生产代码不依赖它。
  */
 import { apiFetch } from './http'
 import type { NewsItem, Tone, Variant, VariantBatch, GenerationSession, NewsContext, StyleSample, ModelConfig, LlmModel, Provider, DashboardData, CrawlSource, QuotaConfig, UserQuota, LabelState } from '../types'

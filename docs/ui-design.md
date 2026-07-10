@@ -2,7 +2,8 @@
 
 > 用途：交给图像生成模型（gptimages 2.0）产出高保真 UI 设计图。
 > 本文件同时是「设计语言规范」+「逐屏视觉描述」+「可直接粘贴的生成提示词」。
-> 权威需求来源：`DESIGN.md` v3 / `HANDOFF.md`。技术栈锁定 **Ant Design 全家桶 + Ant Design X（对话）+ Ant Design Charts**。
+> 权威需求来源：`docs/architecture.md` v3 / `docs/project-overview.md`。
+> **设计基准图**：[`assets/design-draft/`](assets/design-draft/)（7 张，1440×900 @2x）。前端已按其 1:1 还原；改 UI 前先比对。技术栈锁定 **Ant Design 全家桶 + Ant Design X（对话）+ Ant Design Charts**。
 > 产品定位：内部「出稿加速器」，桌面 Web 后台工具，非营销官网。风格要**专业、克制、信息密度高**，不要花哨营销风。
 >
 > ⚠️ **图像生成红线（踩了会被拒绝出图）**：**提示词里绝不出现任何真实第三方品牌/产品/公司/媒体/股票代码名**（如 Ant Design、Linear、Vercel、CNBC、Kontan、BBRI 等）。技术栈品牌名只用于本文件的设计说明，**不进 ▶ 生成提示词**——它只决定视觉气质，模型不需要知道品牌名。所有实体一律用**虚构名**（账号 `@akun_demo`、股票 `SAHM-X`、来源「财经源A/B/C」），并在每段提示词结尾加 `Fully original design, no real brand logos, no real company names`。

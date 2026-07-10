@@ -1,39 +1,38 @@
-# 变体工坊 · 前端（第一轮：骨架 + mock）
+# 变体工坊 · 前端
 
-印尼股市营销文案变体系统的前端。本轮为**前端骨架先行**：按设计图 1:1 还原 6 屏，全部走 mock 数据，**不接后端**。设计与需求见上级目录 `DESIGN.md` / `HANDOFF.md` / `UI-DESIGN.md`，设计图见 `../images/design-draft/`。
+React SPA，**已接真实 FastAPI 后端**（经 `services/` + `http.ts` + Vite 代理）。
 
-## 技术栈
-- Vite + React 18 + TypeScript
-- antd 5（主题 token 见 `src/theme/tokens.ts`）
-- @ant-design/x（对话）· @ant-design/charts（看板）
-- react-router-dom v6
+项目介绍与技术栈见 [`../README.md`](../README.md)；启动、演示账号、测试与坑见 [`../docs/development-guide.md`](../docs/development-guide.md)；UI 规范见 [`../docs/ui-design.md`](../docs/ui-design.md)（配 [`../docs/assets/design-draft/`](../docs/assets/design-draft/) 设计基准图）。
 
-## 运行
 ```bash
 npm install
-npm run dev      # http://localhost:5173
-npm run build    # tsc 类型检查 + 产物构建
+npm run dev      # http://localhost:5173，proxy /api → :8000（需后端先起来）
+npm run build    # tsc --noEmit + 产物构建
 ```
 
-## 登录（mock）
-任意用户名 + 任意密码即可登录，默认**管理员**角色。登录后可在左下角用户菜单**一键切换素材员/管理员**（dev），验证权限：素材员看不到「消耗看板 / 抓取与配额」。
+## 路由
 
-## 6 屏
 | 路由 | 屏 | 角色 |
 |---|---|---|
 | `/login` | 登录 | — |
-| `/generate` | 文案生成工作台（核心：调性→对话→变体卡片） | 全部 |
-| `/news` | 新闻库（筛选 + 详情抽屉 + 用它生成） | 全部 |
+| `/generate` | 文案生成工作台（历史 ｜ 对话 ｜ 变体，三栏） | 全部 |
+| `/news` | 新闻库（分页检索 + 详情抽屉 + 打标 + 用它生成） | 全部 |
 | `/dashboard` | 消耗看板（KPI + 图表 + 明细） | 管理员 |
 | `/crawl-quota` | 抓取与配额 | 管理员 |
-| `/components` | 组件规范（VariantCard 三态 / ToneSelector / tokens） | 全部 |
+| `/accounts` | 账号 / 调性管理 | 管理员 |
+| `/models` | 模型管理（多厂商） | 管理员 |
+| `/components` | 组件走查页 | **仅开发期**，生产构建不挂载 |
 
 ## 目录
-- `src/services/` —— **数据接触面**：当前包 mock，下一轮把函数体换成 `fetch(FastAPI)` 即可，页面零改动。
-- `src/mocks/` —— 静态假数据（脱敏样例：`SAHM-X` / `@akun_demo` / `财经源A-C`）。
-- `src/components/` —— 复用组件（VariantCard / ToneSelector / ScoreRing / ComplianceBadge / HeatBar）。
 
-## 下一轮（未做）
-后端 FastAPI + 真实 Anthropic 调用 + Postgres/pgvector + 离线校准层；真实鉴权。详见 `../DESIGN.md`。
+- `src/services/` —— **数据接触面**：页面只依赖这里的 async 函数，全部走真实 API，不含 mock。
+- `src/components/` —— 生产组件（VariantCard / ToneSelector / ScoreRing / ComplianceBadge / HeatBar / AsyncBoundary / ErrorBoundary / GlobalErrorNotifier）。
+- `src/pages/` —— 业务页面。
+- `src/theme/tokens.ts` —— 设计标记。
+- `src/dev-only/` —— ⚠️ 仅开发期：组件走查页 + mock 假数据。约定见 [`../docs/development-guide.md`](../docs/development-guide.md) §6。
 
-> 🔴 红线：正式对外投放前需法务书面回置（A-1），见 `../HANDOFF.md`。
+**生产代码不得从 `dev-only/` import。**
+
+---
+
+> 🔴 **红线 A-1**：正式对外投放前需法务书面确认。见 [`../docs/decisions/0001-arch-review-closure.md`](../docs/decisions/0001-arch-review-closure.md)。

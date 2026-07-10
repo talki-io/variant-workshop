@@ -1,8 +1,8 @@
 import { Card, Col, Row, Typography, Divider, Table } from 'antd'
 import VariantCard from '../components/VariantCard'
 import ToneSelector from '../components/ToneSelector'
-import { variantBatch } from '../mocks/variants'
-import { tones } from '../mocks/tones'
+import { variantBatch } from './mocks/variants'
+import { tones } from './mocks/tones'
 import { brand } from '../theme/tokens'
 
 const { Title, Paragraph } = Typography

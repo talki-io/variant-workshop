@@ -1,4 +1,4 @@
-import type { Tone } from '../types'
+import type { Tone } from '../../types'
 
 export const tones: Tone[] = [
   { id: 't1', handle: '@akun_demo', name: '犀利散户体', desc: '短句 · 大量俚语' },

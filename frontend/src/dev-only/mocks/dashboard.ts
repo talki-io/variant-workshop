@@ -1,4 +1,4 @@
-import type { DashboardData, DailyUsage, ModelName } from '../types'
+import type { DashboardData, DailyUsage, ModelName } from '../../types'
 
 // 生成近 30 天、按模型分组的消耗数据（确定性，非随机）
 function buildDaily(): DailyUsage[] {
