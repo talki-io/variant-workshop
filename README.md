@@ -32,7 +32,7 @@
 | 采集 | feedparser · BeautifulSoup · Playwright · APScheduler |
 | 模型 | Anthropic（Haiku 清洗/合规；Sonnet 生成；Opus 备用） |
 | 前端 | Vite · React 18 · TypeScript · Ant Design 5（含 X 对话 / Charts 图表） |
-| 部署 | Docker Compose |
+| 部署 | Docker Compose（单机；生产编排见 [`deploy/`](deploy/README.md)） |
 
 **零模型训练。** 全系统基于 prompt + 检索 + 规则——历史爆款只有 40–50 条，够做 few-shot 与风格锚定，不够训练任何模型。
 
@@ -76,6 +76,7 @@ variant-workshop/
 │       ├── pages/        业务页面
 │       ├── services/     API 层（真实 fetch，不含 mock）
 │       └── dev-only/     ⚠️ 仅开发期：走查页 + mock，生产构建不打包
+├── deploy/           生产编排（compose + 部署手册），开发不用
 └── docs/             文档（见下）
 ```
 
@@ -85,6 +86,7 @@ variant-workshop/
 | [`docs/project-overview.md`](docs/project-overview.md) | 产品定位、已拍板的决策、一期底线 |
 | [`docs/architecture.md`](docs/architecture.md) | 唯一权威设计（v3 定稿） |
 | [`docs/development-guide.md`](docs/development-guide.md) | 怎么跑、怎么测、已知的坑 |
+| [`deploy/README.md`](deploy/README.md) | 生产部署手册：首次部署、建管理员、备份、成本闸门、排障 |
 | [`docs/ui-design.md`](docs/ui-design.md) | UI 设计语言与逐屏规范（配 [`docs/assets/design-draft/`](docs/assets/design-draft/) 设计基准图） |
 | [`docs/decisions/`](docs/decisions/) | ADR：架构决策记录 |
 | [`docs/audit/PROJECT_GOVERNANCE_REPORT.md`](docs/audit/PROJECT_GOVERNANCE_REPORT.md) | 项目治理报告（追溯用，日常开发不必读） |

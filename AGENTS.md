@@ -86,6 +86,7 @@ frontend/package-lock.json 机器生成
 | **试图「修准」`score` / `aiScore` / `styleDistance` / `diversity`** | 样本永久缺失、离线校准层不建，这些是近似占位，**不是 bug**。见 [`docs/decisions/0002`](docs/decisions/0002-no-offline-calibration-layer.md)。 |
 | **实现任何 Cloudflare 规避** | 见 [`docs/decisions/0003`](docs/decisions/0003-no-cloudflare-evasion.md)。`is_challenge_page` 只用于识别并放弃，不用于绕过。 |
 | **`docker compose down -v`** | 卷里有真实抓取的新闻和迁移状态，`-v` 会一起清掉。 |
+| **生产开 `SEED_DEMO_DATA=true`，或给 backend 加副本 / `--workers`** | 前者会灌出 `admin`/`editor` 两个 `demo1234` 账号（可登录后门）；后者会并发跑迁移并把定时抓取重复执行 N 遍、token 烧 N 份。见 [`docs/decisions/0004`](docs/decisions/0004-deployment-single-node-compose.md)。 |
 | **跑测试不带 `-e DATABASE_URL=…imitator_test`** | 会回退到 live 库并污染真实数据。历史上 admin/editor 用量神秘消失就是这么来的。 |
 | **改写已应用的 `migrations/versions/*.py`** | 已上 live 的迁移只能新增版本。 |
 | **读取 / 修改 / 提交 `backend/.env`** | 含真实 `ANTHROPIC_API_KEY` / `JWT_SECRET`。改配置改 `.env.example`。 |
