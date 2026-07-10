@@ -17,7 +17,9 @@
 3. **生产代码依赖 mock。** 喂假数据的组件走查页 `/components` 挂在生产路由上。
 4. **新人跑不起来。** `backend/.env.example` 缺 `USE_REAL_LLM` 与 `CRAWL_SCHEDULER_ENABLED` 两个键。
 
-仓库名 `ai-agent-imitator` 亦有误导——它不是 Agent 框架，是一条确定性的文案生成流水线。产品名统一为 **variant-workshop（变体工坊）**。
+仓库名 `ai-agent-imitator` 亦有误导——它不是 Agent 框架，是一条确定性的文案生成流水线。
+
+**已于 2026-07-10 完成改名**：GitHub 仓库 `talki-io/ai-agent-imitator` → `talki-io/variant-workshop`（旧 URL 由 GitHub 自动重定向）；本地目录 `~/aiProject/ai-agent-imitator` → `~/aiProject/variant-workshop`；`git remote` 已切到新 URL；仓库描述补齐。数据库名 `imitator` 刻意保留（见 §8）。
 
 ---
 
@@ -151,7 +153,7 @@ variant-workshop/
 - 后端 `crawl_html.py:15` 跨模块私有导入 `_is_junk_title`；`app/` 顶层扁平堆 17 个 `.py`。
 - `docs/assets/design-draft/` 文件名无语义，重命名需逐张核对屏幕归属。
 - 无正式品牌 favicon；`index.html` 当前不引用图标。
-- 项目物理目录仍为 `ai-agent-imitator`，git 远端未改名——需在仓库外操作。
+- 数据库名仍为 `imitator`（`docker-compose.yml` / `config.py` / `conftest.py`）。改名要动 compose、`.env`、已有数据卷与 11 个迁移，且卷里有真实抓取的新闻数据——**刻意保留**，命名统一的价值在人读到的名字，不在连接串。
 
 ---
 
