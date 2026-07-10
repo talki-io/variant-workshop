@@ -68,7 +68,7 @@ docker compose -f deploy/docker-compose.prod.yml up -d --build
 生产**不灌演示账号**（`SEED_DEMO_DATA=false`）。空库首启后没有任何用户，必须手工开第一个口子：
 
 ```bash
-docker compose -f deploy/docker-compose.prod.yml exec backend python -m app.create_admin <用户名>
+docker compose -f deploy/docker-compose.prod.yml exec backend python -m app.create_user <用户名> --role admin
 ```
 
 按提示输两遍密码（≥12 位，拒绝 `demo1234`）。非交互场景用 `ADMIN_PASSWORD` 环境变量传，**不要用命令行参数**——argv 会进 shell history，也会被同机 `ps` 看到。
@@ -175,7 +175,7 @@ docker compose -f deploy/docker-compose.prod.yml exec -T db \
 | Playwright 抓取崩溃 | Chromium 吃 `/dev/shm`。compose 已给 backend `shm_size: 1gb`；若仍崩，调大。 |
 | backend 起不来，日志报迁移冲突 | 多半是手工改过已应用的迁移文件。回滚该文件，改用新增版本。 |
 | 启动日志有「⚠️ JWT_SECRET 使用了默认/占位值」 | `.env` 里 `JWT_SECRET` 没填。填上重启（已签发的 token 会全部失效）。 |
-| 启动日志有「库中没有任何用户」 | 正常——生产不灌演示账号。跑 `create_admin`（见上）。 |
+| 启动日志有「库中没有任何用户」 | 正常——生产不灌演示账号。跑 `create_user`（见上）。 |
 | Cloudflare 拦截导致抓取源 `health=error` | 预期行为，系统只识别并放弃，**不做规避**（[ADR 0003](../docs/decisions/0003-no-cloudflare-evasion.md)）。 |
 
 ---

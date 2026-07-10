@@ -54,7 +54,7 @@ services:
       # DATABASE_URL 在这里组装，密码只在 .env 里存一份，避免两处不同步。
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-imitator}
       # 生产硬关演示数据：否则空库首启会建 admin/editor，密码都是 demo1234。
-      # 管理员用 `exec backend python -m app.create_admin <用户名>` 建。
+      # 管理员用 `exec backend python -m app.create_user <用户名> --role admin` 建。
       SEED_DEMO_DATA: "false"
     depends_on:
       db:
