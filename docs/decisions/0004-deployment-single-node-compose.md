@@ -41,6 +41,7 @@
 
 - `app/seed.py` 拆为 `seed_system`（模型库 / 场景绑定 / 配额 / 真实抓取源——所有环境都灌）与 `seed_demo`（种子账号 / 示例调性 / 变体 / 爆款样本——生产跳过）。`seed(db, demo=True)` 保持默认行为，`tests/conftest.py` 与 57 个测试不受影响。
 - 新增 `app/create_admin.py`。密码走交互提示或 `ADMIN_PASSWORD` 环境变量，**不接受 argv**（会进 shell history 和 `ps`）。
+  > 后续变更（2026-07-10）：该文件已更名为 `app/create_user.py` 并加 `--role editor|admin`（默认 `editor`），以便批量建素材员账号。命令改为 `python -m app.create_user <用户名> [--role admin]`。
 - 生产库首启后 `users` 表为空，`lifespan` 会打一条告警日志提示建管理员。属预期，不是故障。
 - 这个栈**不终结 TLS**，默认只绑 `127.0.0.1`。对外暴露必须先在前面放一层带证书的反代。
 - 前端生产走 nginx 反代 `/api`（同源），因此 `main.py` 里那段只允许 `localhost:5173` 的 CORS 配置不需要为生产放开。

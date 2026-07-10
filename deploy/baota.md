@@ -98,7 +98,7 @@ curl -s localhost:8080/healthz                            # → ok
 生产不灌演示账号，空库里没有任何用户，必须手工开第一个口子：
 
 ```bash
-docker compose -f deploy/docker-compose.prod.yml exec backend python -m app.create_admin <用户名>
+docker compose -f deploy/docker-compose.prod.yml exec backend python -m app.create_user <用户名> --role admin
 ```
 
 按提示输两遍密码（≥12 位）。

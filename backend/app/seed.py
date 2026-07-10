@@ -7,7 +7,7 @@
 - `seed_demo`：演示数据——种子账号（密码 demo1234）、示例调性/变体/爆款样本。
   内容与 frontend/src/dev-only/mocks/* 一致（SAHM-X / @akun_demo）。
   **生产必须关闭**（`SEED_DEMO_DATA=false`），否则空库首启会留下 admin/demo1234 这个可登录后门。
-  生产的管理员用 `python -m app.create_admin` 单独创建。
+  生产的管理员用 `python -m app.create_user <用户名> --role admin` 单独创建。
 """
 
 from datetime import datetime

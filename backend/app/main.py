@@ -36,7 +36,7 @@ async def lifespan(app: FastAPI):
             if db.scalar(select(func.count()).select_from(User)) == 0:
                 logging.getLogger("uvicorn.error").warning(
                     "⚠️ 库中没有任何用户，且演示数据已关闭。用 `docker compose -f deploy/docker-compose.prod.yml "
-                    "exec backend python -m app.create_admin <用户名>` 创建管理员，否则无法登录。"
+                    "exec backend python -m app.create_user <用户名> --role admin` 创建管理员，否则无法登录。"
                 )
         from .llm import refresh_model_config
 
