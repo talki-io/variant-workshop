@@ -13,14 +13,15 @@
 | --- | --- |
 | 后端测试 | ✅ 57 passed |
 | 前端构建 | ✅ `tsc --noEmit` + `vite build` |
+| 前端产物门禁 | ✅ `check:bundle`（chunk 无循环引用）+ `smoke`（headless 打开生产构建，断言零 Uncaught） |
 | 前端测试 | ❌ **0 个**。新写组件应带测试 |
-| CI | ❌ **无**。门禁全靠人记得手动跑 |
+| CI | ✅ GitHub Actions（`.github/workflows/ci.yml`）：PR 与 push to master 触发 |
 | lint / format | ❌ 后端无 ruff，前端无 eslint/prettier |
 | favicon | ⚪ 无。`index.html` 不引用图标，等正式品牌图 |
 | bandit 权重 | ⚪ 未接。埋点已在 `telemetry_event` 表收集 |
 | 对外投放 | ⛔ 被 A-1 法务闸阻断（见 §4） |
 
-**技术债，想动手从这里挑**：① 建 CI（**在动任何代码结构之前先做这个**）；② `crawl_html.py:15` 从 `crawl_playwright` 导入私有函数 `_is_junk_title`；③ `app/` 顶层扁平堆 17 个 `.py`，三个 `crawl*.py` 应收敛为包（须等 CI）；④ `docs/assets/design-draft/` 文件名无语义。
+**技术债，想动手从这里挑**：① `crawl_html.py:15` 从 `crawl_playwright` 导入私有函数 `_is_junk_title`；② `app/` 顶层扁平堆 17 个 `.py`，三个 `crawl*.py` 应收敛为包（CI 已就位，可以动了）；③ `docs/assets/design-draft/` 文件名无语义；④ 前端零测试；⑤ 后端无 ruff、前端无 eslint。
 
 ---
 
@@ -103,8 +104,10 @@ frontend/package-lock.json 机器生成
 cd backend  && docker compose up --build -d   # db :5433 + backend :8000
 cd frontend && npm run dev                    # :5173
 
-# 门禁（提交前必过）
-cd frontend && npm run build                  # 含 tsc --noEmit
+# 门禁（提交前必过；CI 跑的是同一套）
+cd frontend && npm run verify                 # build(含 tsc) + check:bundle + smoke
+# 单跑：npm run build / npm run check:bundle / npm run smoke
+# smoke 需要本机有 Chrome（或设 CHROME_BIN）。`npm run build` 通过 ≠ 页面跑得起来。
 
 cd backend && docker compose run --rm \
   -e DATABASE_URL=postgresql+psycopg://app:app@db:5432/imitator_test \
