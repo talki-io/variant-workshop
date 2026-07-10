@@ -5,6 +5,7 @@ from alembic import command
 from alembic.config import Config as AlembicConfig
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import func, select
 
 from .config import settings
 from .db import SessionLocal
@@ -25,9 +26,18 @@ async def lifespan(app: FastAPI):
     # 1) 用 Alembic 迁移建/升级 schema（迁移里已含 CREATE EXTENSION vector）。
     #    单一事实来源，替代旧的 create_all。
     command.upgrade(AlembicConfig("alembic.ini"), "head")
-    # 2) 幂等灌假数据 + 载入模型场景配置到进程缓存
+    # 2) 幂等灌种子数据 + 载入模型场景配置到进程缓存。
+    #    seed_demo_data=False（生产）时只灌系统必需配置，不建 demo1234 种子账号。
     with SessionLocal() as db:
-        seed(db)
+        seed(db, demo=settings.seed_demo_data)
+        if not settings.seed_demo_data:
+            from .models import User
+
+            if db.scalar(select(func.count()).select_from(User)) == 0:
+                logging.getLogger("uvicorn.error").warning(
+                    "⚠️ 库中没有任何用户，且演示数据已关闭。用 `docker compose -f deploy/docker-compose.prod.yml "
+                    "exec backend python -m app.create_admin <用户名>` 创建管理员，否则无法登录。"
+                )
         from .llm import refresh_model_config
 
         refresh_model_config(db)

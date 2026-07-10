@@ -1,6 +1,13 @@
-"""幂等灌假数据。内容与 frontend/src/mocks/* 严格一致（SAHM-X / @akun_demo / 财经源A-C）。
+"""幂等灌种子数据。已有数据则跳过（按各表是否为空判断），可安全重复执行。
 
-已有数据则跳过（按各表是否为空判断），可安全重复执行。
+分两层：
+
+- `seed_system`：系统跑起来就必须有的配置——模型库、各场景模型绑定、配额基线、真实抓取源。
+  任何环境都灌。
+- `seed_demo`：演示数据——种子账号（密码 demo1234）、示例调性/变体/爆款样本。
+  内容与 frontend/src/dev-only/mocks/* 一致（SAHM-X / @akun_demo）。
+  **生产必须关闭**（`SEED_DEMO_DATA=false`），否则空库首启会留下 admin/demo1234 这个可登录后门。
+  生产的管理员用 `python -m app.create_admin` 单独创建。
 """
 
 from datetime import datetime
@@ -26,7 +33,67 @@ def _empty(db: Session, model) -> bool:
     return db.scalar(select(func.count()).select_from(model)) == 0
 
 
-def seed(db: Session) -> None:
+def seed_system(db: Session) -> None:
+    """系统必需配置。所有环境（含生产）都灌，不含任何演示/假数据。"""
+    # ---- 抓取源 ----
+    if _empty(db, CrawlSource):
+        db.add_all([
+            # 真实印尼财经 RSS 源（公开订阅源，RSS-first；DESIGN §3 M1 点名 CNBC ID/Kontan 等）
+            CrawlSource(id="s1", name="CNBC Indonesia · 市场", type="RSS", url="https://www.cnbcindonesia.com/market/rss", frequency="每 15 分钟", last_crawl="—", health="ok", enabled=True),
+            CrawlSource(id="s2", name="Detik Finance", type="RSS", url="https://finance.detik.com/rss", frequency="每 30 分钟", last_crawl="—", health="ok", enabled=True),
+            # IDX：Playwright 渲染实测可抓真实官方新闻（.card-title 结构化抽取）；Cloudflare 偶发拦截会如实置 error，不造假。
+            CrawlSource(id="s3", name="IDX 官网 · 新闻（Playwright JS 渲染）", type="Playwright", url="https://www.idx.co.id/en/news/news", frequency="每 60 分钟", last_crawl="—", health="ok", enabled=True),
+            # Antara/Investing 为泛经济/国际源，非印尼官方且股票密度低——默认禁用（相关性硬过滤已兜底，
+            # 但优先官方/精准源：IDX 官方 + IDNFinancials + CNBC 市场）。需要时可在「抓取源」页手动启用。
+            CrawlSource(id="s4", name="Antara · 经济", type="RSS", url="https://www.antaranews.com/rss/ekonomi.xml", frequency="每 2 小时", last_crawl="—", health="ok", enabled=False),
+            CrawlSource(id="s5", name="Investing.com · 新闻（国际源）", type="RSS", url="https://www.investing.com/rss/news_25.rss", frequency="每 60 分钟", last_crawl="—", health="ok", enabled=False),
+            CrawlSource(id="s6", name="Stockbit 社区（Playwright JS 渲染）", type="Playwright", url="https://stockbit.com/", frequency="每 4 小时", last_crawl="—", health="ok", enabled=False),
+            # 印尼 JS 站均被 Cloudflare/IP 信誉拦截（本机出口 IP 无法过挑战），默认禁用；
+            # 需印尼住宅/授权出口或官方数据渠道方可启用（业务决策）。Playwright 能力本身已实现并实测可用。
+            CrawlSource(id="s7", name="IDNFinancials · 新闻（Playwright JS 渲染）", type="Playwright", url="https://www.idnfinancials.com/news", frequency="每 60 分钟", last_crawl="—", health="ok", enabled=False),
+            # 官方/专业精准源（用户点名接入）：Kontan 投资版 RSS（可直抓）+ OJK 官方新闻稿（SharePoint 服务端渲染、非 CF SPA，Playwright 抽 /siaran-pers/Pages 稿件）
+            CrawlSource(id="s8", name="Kontan · 投资", type="RSS", url="https://investasi.kontan.co.id/rss", frequency="每 30 分钟", last_crawl="—", health="ok", enabled=True),
+            CrawlSource(id="s9", name="OJK · 官方新闻稿（静态抓取）", type="HTML", url="https://www.ojk.go.id/id/berita-dan-kegiatan/siaran-pers/Default.aspx", frequency="每 4 小时", last_crawl="—", health="ok", enabled=True),
+        ])
+
+    # ---- 模型库：默认 3 个 Anthropic 模型（管理员可在「模型管理」页 CRUD 增补其他厂商）----
+    if _empty(db, LlmModel):
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        db.add_all([
+            LlmModel(id="mdl_haiku", name="Haiku 4.5（快·省）", provider="anthropic",
+                     model_id="claude-haiku-4-5", base_url=None, api_key=None, enabled=True, created_at=now),
+            LlmModel(id="mdl_sonnet", name="Sonnet 5（均衡·主力）", provider="anthropic",
+                     model_id="claude-sonnet-5", base_url=None, api_key=None, enabled=True, created_at=now),
+            LlmModel(id="mdl_opus", name="Opus 4.8（最强·贵）", provider="anthropic",
+                     model_id="claude-opus-4-8", base_url=None, api_key=None, enabled=True, created_at=now),
+        ])
+
+    # ---- 模型配置：各管线场景绑定模型库某模型 + 参数（可在「模型管理」页改）----
+    if _empty(db, ModelConfig):
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        db.add_all([
+            ModelConfig(scene="generate", label="文案生成", model_id="mdl_sonnet",
+                        max_tokens=3600, temperature=None, enabled=True, updated_at=now),
+            ModelConfig(scene="clean", label="新闻清洗富化", model_id="mdl_haiku",
+                        max_tokens=4000, temperature=None, enabled=True, updated_at=now),
+            ModelConfig(scene="compliance", label="语义合规", model_id="mdl_haiku",
+                        max_tokens=600, temperature=None, enabled=True, updated_at=now),
+        ])
+
+    # ---- 配额 ----
+    if _empty(db, QuotaConfig):
+        # global_used 基线归零：全局已用只反映真实今日用量（干净起点，不做合成基线）。
+        db.add(QuotaConfig(id=1, per_user_daily=20_000, over_threshold_pct=80,
+                           circuit_breaker=True, breaker_condition="错误率 ≥ 20% 且持续 5 分钟",
+                           global_daily=1_000_000, global_used=0, global_used_pct=0.0))
+    # 配额页「按用户」由真实 users + 今日实时用量组装（routers/quota.py），无需灌任何用户配额数据。
+    # （旧的 user_quota 假数据表已于迁移 0006 移除。）
+
+    db.commit()
+
+
+def seed_demo(db: Session) -> None:
+    """演示数据。生产必须跳过——含固定密码的种子账号。"""
     # ---- 用户：两个种子账号，密码均为 demo1234，验证 RBAC ----
     if _empty(db, User):
         db.add_all([
@@ -80,27 +147,6 @@ def seed(db: Session) -> None:
     # ---- token_usage：不再灌假数据。看板由真实 token_usage 聚合，明细也读真行。----
     # （真实行来自实际生成/清洗/抓取记账，见 usage.record_usage）
 
-    # ---- 抓取源 ----
-    if _empty(db, CrawlSource):
-        db.add_all([
-            # 真实印尼财经 RSS 源（公开订阅源，RSS-first；DESIGN §3 M1 点名 CNBC ID/Kontan 等）
-            CrawlSource(id="s1", name="CNBC Indonesia · 市场", type="RSS", url="https://www.cnbcindonesia.com/market/rss", frequency="每 15 分钟", last_crawl="—", health="ok", enabled=True),
-            CrawlSource(id="s2", name="Detik Finance", type="RSS", url="https://finance.detik.com/rss", frequency="每 30 分钟", last_crawl="—", health="ok", enabled=True),
-            # IDX：Playwright 渲染实测可抓真实官方新闻（.card-title 结构化抽取）；Cloudflare 偶发拦截会如实置 error，不造假。
-            CrawlSource(id="s3", name="IDX 官网 · 新闻（Playwright JS 渲染）", type="Playwright", url="https://www.idx.co.id/en/news/news", frequency="每 60 分钟", last_crawl="—", health="ok", enabled=True),
-            # Antara/Investing 为泛经济/国际源，非印尼官方且股票密度低——默认禁用（相关性硬过滤已兜底，
-            # 但优先官方/精准源：IDX 官方 + IDNFinancials + CNBC 市场）。需要时可在「抓取源」页手动启用。
-            CrawlSource(id="s4", name="Antara · 经济", type="RSS", url="https://www.antaranews.com/rss/ekonomi.xml", frequency="每 2 小时", last_crawl="—", health="ok", enabled=False),
-            CrawlSource(id="s5", name="Investing.com · 新闻（国际源）", type="RSS", url="https://www.investing.com/rss/news_25.rss", frequency="每 60 分钟", last_crawl="—", health="ok", enabled=False),
-            CrawlSource(id="s6", name="Stockbit 社区（Playwright JS 渲染）", type="Playwright", url="https://stockbit.com/", frequency="每 4 小时", last_crawl="—", health="ok", enabled=False),
-            # 印尼 JS 站均被 Cloudflare/IP 信誉拦截（本机出口 IP 无法过挑战），默认禁用；
-            # 需印尼住宅/授权出口或官方数据渠道方可启用（业务决策）。Playwright 能力本身已实现并实测可用。
-            CrawlSource(id="s7", name="IDNFinancials · 新闻（Playwright JS 渲染）", type="Playwright", url="https://www.idnfinancials.com/news", frequency="每 60 分钟", last_crawl="—", health="ok", enabled=False),
-            # 官方/专业精准源（用户点名接入）：Kontan 投资版 RSS（可直抓）+ OJK 官方新闻稿（SharePoint 服务端渲染、非 CF SPA，Playwright 抽 /siaran-pers/Pages 稿件）
-            CrawlSource(id="s8", name="Kontan · 投资", type="RSS", url="https://investasi.kontan.co.id/rss", frequency="每 30 分钟", last_crawl="—", health="ok", enabled=True),
-            CrawlSource(id="s9", name="OJK · 官方新闻稿（静态抓取）", type="HTML", url="https://www.ojk.go.id/id/berita-dan-kegiatan/siaran-pers/Default.aspx", frequency="每 4 小时", last_crawl="—", health="ok", enabled=True),
-        ])
-
     # ---- 往期爆款样本（账号 t1 的风格锚，few-shot 用）----
     if _empty(db, StyleSample):
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -110,37 +156,11 @@ def seed(db: Session) -> None:
             for i, (source, body) in enumerate(HOT_SAMPLES)
         ])
 
-    # ---- 模型库：默认 3 个 Anthropic 模型（管理员可在「模型管理」页 CRUD 增补其他厂商）----
-    if _empty(db, LlmModel):
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        db.add_all([
-            LlmModel(id="mdl_haiku", name="Haiku 4.5（快·省）", provider="anthropic",
-                     model_id="claude-haiku-4-5", base_url=None, api_key=None, enabled=True, created_at=now),
-            LlmModel(id="mdl_sonnet", name="Sonnet 5（均衡·主力）", provider="anthropic",
-                     model_id="claude-sonnet-5", base_url=None, api_key=None, enabled=True, created_at=now),
-            LlmModel(id="mdl_opus", name="Opus 4.8（最强·贵）", provider="anthropic",
-                     model_id="claude-opus-4-8", base_url=None, api_key=None, enabled=True, created_at=now),
-        ])
-
-    # ---- 模型配置：各管线场景绑定模型库某模型 + 参数（可在「模型管理」页改）----
-    if _empty(db, ModelConfig):
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        db.add_all([
-            ModelConfig(scene="generate", label="文案生成", model_id="mdl_sonnet",
-                        max_tokens=3600, temperature=None, enabled=True, updated_at=now),
-            ModelConfig(scene="clean", label="新闻清洗富化", model_id="mdl_haiku",
-                        max_tokens=4000, temperature=None, enabled=True, updated_at=now),
-            ModelConfig(scene="compliance", label="语义合规", model_id="mdl_haiku",
-                        max_tokens=600, temperature=None, enabled=True, updated_at=now),
-        ])
-
-    # ---- 配额 ----
-    if _empty(db, QuotaConfig):
-        # global_used 基线归零：全局已用只反映真实今日用量（干净起点，不做合成基线）。
-        db.add(QuotaConfig(id=1, per_user_daily=20_000, over_threshold_pct=80,
-                           circuit_breaker=True, breaker_condition="错误率 ≥ 20% 且持续 5 分钟",
-                           global_daily=1_000_000, global_used=0, global_used_pct=0.0))
-    # 配额页「按用户」由真实 users + 今日实时用量组装（routers/quota.py），无需灌任何用户配额数据。
-    # （旧的 user_quota 假数据表已于迁移 0006 移除。）
-
     db.commit()
+
+
+def seed(db: Session, *, demo: bool = True) -> None:
+    """默认连演示数据一起灌（保持开发/测试行为不变）。生产传 demo=False。"""
+    seed_system(db)
+    if demo:
+        seed_demo(db)
