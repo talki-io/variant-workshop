@@ -6,6 +6,19 @@ export interface User {
   name: string
   role: Role
   avatar?: string
+  active?: boolean // 启用/停用（软删）
+}
+
+// ===== 菜单（数据驱动导航注册表）=====
+export interface MenuItem {
+  id: string
+  path: string // = 菜单 key = 前端路由
+  label: string
+  icon: string // 图标白名单注册表键名（见 layout/menuIcons.tsx）
+  order: number
+  visibleRoles: Role[]
+  enabled: boolean
+  locked: boolean // 核心项禁删（用户/菜单管理）
 }
 
 // ===== 语感调性（账号指纹） =====

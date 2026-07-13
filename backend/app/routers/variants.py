@@ -88,7 +88,8 @@ def generate_variants(
     user: User = Depends(get_current_user),
 ) -> VariantBatchOut:
     tone = db.get(Tone, body.tone_id)
-    if tone is None:
+    if tone is None or tone.owner_id != user.id:
+        # 账号按创建者隔离：不能借用他人账号（及其参考爆款样本）生成
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="调性不存在")
 
     cfg = db.get(QuotaConfig, 1)
@@ -313,7 +314,8 @@ def regenerate_variant(
     if v is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="变体不存在")
     tone = db.get(Tone, v.tone_id)
-    if tone is None:
+    if tone is None or tone.owner_id != user.id:
+        # 只能对自己名下账号的变体重生成（避免借用他人账号样本）
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="调性不存在")
 
     cfg = db.get(QuotaConfig, 1)

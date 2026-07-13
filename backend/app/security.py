@@ -51,6 +51,9 @@ def get_current_user(
     user = db.get(User, user_id)
     if user is None:
         raise credentials_exc
+    if not user.active:
+        # 停用用户的现存 token 立即失效
+        raise credentials_exc
     return user
 
 

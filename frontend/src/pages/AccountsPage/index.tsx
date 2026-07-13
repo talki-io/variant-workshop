@@ -98,8 +98,8 @@ export default function AccountsPage() {
       extra={<Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>新增账号</Button>}
     >
       <div style={{ marginBottom: 12, color: brand.textSecondary, fontSize: 13 }}>
-        这里管理文案生成用的「账号语感」。每个账号有独立的参考爆款样本（在生成页「参考爆款」里维护），
-        生成时选中某账号即按其语感 + 爆款风格产出。
+        这里管理你自己的「账号语感」——只有你能看到和维护，其他用户互不可见。每个账号有独立的参考爆款样本
+        （在生成页「参考爆款」里维护，同样只归属该账号），生成时选中某账号即按其语感 + 爆款风格产出。
       </div>
       <Table rowKey="id" columns={columns} dataSource={data} pagination={false} size="middle" />
 

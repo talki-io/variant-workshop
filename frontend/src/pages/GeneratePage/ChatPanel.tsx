@@ -1,6 +1,7 @@
 import { useState, useEffect, type KeyboardEvent } from 'react'
-import { Avatar, Button, Card, Tooltip, Input, App, Tag } from 'antd'
+import { Avatar, Button, Card, Tooltip, Input, App, Tag, Alert } from 'antd'
 import { Bubble } from '@ant-design/x'
+import { useNavigate } from 'react-router-dom'
 import {
   RobotOutlined,
   UserOutlined,
@@ -70,6 +71,8 @@ export default function ChatPanel({
   onStyleRefsChange,
 }: Props) {
   const { message } = App.useApp()
+  const navigate = useNavigate()
+  const noTones = tones.length === 0
   const canSend = !!toneId && !!input.trim() && !generating
   const currentTone = tones.find((t) => t.id === toneId)
   const [sampleOpen, setSampleOpen] = useState(false)
@@ -123,8 +126,22 @@ export default function ChatPanel({
       style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
       styles={{ body: { display: 'flex', flexDirection: 'column', height: '100%', padding: 20 } }}
     >
-      {/* 调性选择器 */}
-      <ToneSelector tones={tones} value={toneId} onChange={onToneChange} />
+      {/* 调性选择器；无账号时引导去账号管理创建（账号按用户隔离，新用户初始为空） */}
+      {noTones ? (
+        <Alert
+          type="info"
+          showIcon
+          message="还没有账号"
+          description="文案生成需要先有一个「账号语感」。账号与参考爆款样本按用户隔离，请先创建你自己的账号。"
+          action={
+            <Button size="small" type="primary" onClick={() => navigate('/accounts')}>
+              去创建账号
+            </Button>
+          }
+        />
+      ) : (
+        <ToneSelector tones={tones} value={toneId} onChange={onToneChange} />
+      )}
 
       {/* 对话流 */}
       <div style={{ flex: 1, overflow: 'auto', margin: '16px 0', paddingRight: 4 }}>

@@ -70,7 +70,12 @@ def test_tones_news_require_auth():
         assert c.get("/api/tones").status_code == 401
         assert c.get("/api/news").status_code == 401
         h = _headers(c, "editor")
-        assert len(c.get("/api/tones", headers=h).json()) == 4
+        # 账号按用户隔离：种子账号 t1-t4 归 admin，editor 看不到它们（初始名下可能为空）
+        et = c.get("/api/tones", headers=h).json()
+        assert all(t["id"] not in {"t1", "t2", "t3", "t4"} for t in et)
+        ah = _headers(c, "admin")
+        at = {t["id"] for t in c.get("/api/tones", headers=ah).json()}
+        assert {"t1", "t2", "t3", "t4"}.issubset(at)
         # 新闻库改为分页出参 {items,total,sources}；断言分页结构而非裸列表
         page = c.get("/api/news", headers=h).json()
         assert isinstance(page["items"], list)
@@ -171,13 +176,14 @@ def test_quota_update_admin_only_and_restores():
 
 
 def _first_variant(c: TestClient, headers: dict) -> dict:
+    # 用 admin（种子账号 t1 的归属者）生成：离线回退返回 t1 库存变体，归属 admin，可被其编辑/重生成
     batch = c.post("/api/variants", headers=headers, json={"toneId": "t1", "prompt": "测试用例"}).json()
     return batch["variants"][0]
 
 
 def test_variant_edit_recheck_and_restore():
     with TestClient(app) as c:
-        h = _headers(c, "editor")
+        h = _headers(c, "admin")
         var = _first_variant(c, h)
         vid, original = var["id"], var["body"]
         try:
@@ -196,7 +202,7 @@ def test_variant_edit_recheck_and_restore():
 
 def test_variant_regenerate_offline():
     with TestClient(app) as c:
-        h = _headers(c, "editor")
+        h = _headers(c, "admin")
         var = _first_variant(c, h)
         vid, original = var["id"], var["body"]
         try:
@@ -292,6 +298,42 @@ def test_style_samples_crud():
         assert len(c.get("/api/tones/t1/samples", headers=h).json()) == base
         assert c.delete(f"/api/samples/{sid}", headers=h).status_code == 404
 
+        # 账号隔离：editor 不是 t1 的归属者，读/写 t1 的样本一律 404
+        eh = _headers(c, "editor")
+        assert c.get("/api/tones/t1/samples", headers=eh).status_code == 404
+        assert c.post("/api/tones/t1/samples", headers=eh, json={"body": "x"}).status_code == 404
+
+
+def test_tone_ownership_isolation():
+    """账号（及其参考爆款样本）按创建者隔离：用户之间互不可见、互不干扰。"""
+    with TestClient(app) as c:
+        eh = _headers(c, "editor")
+        ah = _headers(c, "admin")
+        # editor 新建自己的账号
+        created = c.post("/api/tones", headers=eh,
+                         json={"handle": "@e_own", "name": "隔离体", "desc": "测试"})
+        assert created.status_code == 201
+        tid = created.json()["id"]
+        try:
+            # editor 自己看得到；admin 看不到 editor 的账号
+            assert any(t["id"] == tid for t in c.get("/api/tones", headers=eh).json())
+            assert all(t["id"] != tid for t in c.get("/api/tones", headers=ah).json())
+            # admin 改 / 删 / 读样本 editor 的账号 → 一律 404（不泄露存在性）
+            assert c.put(f"/api/tones/{tid}", headers=ah, json={"name": "x"}).status_code == 404
+            assert c.get(f"/api/tones/{tid}/samples", headers=ah).status_code == 404
+            assert c.delete(f"/api/tones/{tid}", headers=ah).status_code == 404
+            # editor 借用 admin 的 t1 生成 → 404；用自己账号生成 → 200（离线回退 t1 库存，归属 editor）
+            assert c.post("/api/variants", headers=eh, json={"toneId": "t1", "prompt": "x"}).status_code == 404
+            assert c.post("/api/variants", headers=eh, json={"toneId": tid, "prompt": "x"}).status_code == 200
+            # 样本隔离：editor 给自己账号加样本，admin 删不掉（→404），本人可删
+            s = c.post(f"/api/tones/{tid}/samples", headers=eh, json={"body": "我的爆款样本"})
+            assert s.status_code == 200
+            sid2 = s.json()["id"]
+            assert c.delete(f"/api/samples/{sid2}", headers=ah).status_code == 404
+            assert c.delete(f"/api/samples/{sid2}", headers=eh).status_code == 200
+        finally:
+            c.delete(f"/api/tones/{tid}", headers=eh)
+
 
 # ===== 新闻库分页 / 检索 =====
 def test_news_pagination_and_search():
@@ -338,11 +380,16 @@ def test_news_pagination_and_search():
 
 
 # ===== 账号/调性管理 + 模型管理 =====
-def test_tone_crud_admin_only():
+def test_tone_crud_owner_scoped():
+    """账号 CRUD 对所有登录用户开放，但按归属隔离：editor 与 admin 都能建/改/删自己名下账号。"""
     with TestClient(app) as c:
         eh = _headers(c, "editor")
         ah = _headers(c, "admin")
-        assert c.post("/api/tones", headers=eh, json={"handle": "@x", "name": "x", "desc": "x"}).status_code == 403
+        # editor 也能创建自己的账号（不再是 admin 专属）
+        er = c.post("/api/tones", headers=eh, json={"handle": "@x", "name": "素材员账号", "desc": "x"})
+        assert er.status_code == 201
+        etid = er.json()["id"]
+        # admin 创建自己的账号
         r = c.post("/api/tones", headers=ah, json={"handle": "@t", "name": "测试账号", "desc": "短句"})
         assert r.status_code == 201
         tid = r.json()["id"]
@@ -350,9 +397,13 @@ def test_tone_crud_admin_only():
             assert c.post("/api/tones", headers=ah, json={"handle": " ", "name": " ", "desc": ""}).status_code == 422
             upd = c.put(f"/api/tones/{tid}", headers=ah, json={"name": "改名"})
             assert upd.status_code == 200 and upd.json()["name"] == "改名"
-            assert tid in {t["id"] for t in c.get("/api/tones", headers=eh).json()}
+            # 归属隔离：editor 看不到 admin 刚建的账号
+            assert tid not in {t["id"] for t in c.get("/api/tones", headers=eh).json()}
+            # editor 看得到自己的
+            assert etid in {t["id"] for t in c.get("/api/tones", headers=eh).json()}
         finally:
             assert c.delete(f"/api/tones/{tid}", headers=ah).json()["ok"] is True
+            c.delete(f"/api/tones/{etid}", headers=eh)
         assert c.put(f"/api/tones/{tid}", headers=ah, json={"name": "z"}).status_code == 404
 
 
