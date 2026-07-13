@@ -15,17 +15,15 @@ import {
 } from '@ant-design/icons'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import { useMenu } from '../menu/MenuContext'
 import { useThemeMode } from '../theme/ThemeContext'
 import { getQuota } from '../services'
 import { brand } from '../theme/tokens'
 
 const { Header } = Layout
 
-const TITLES: Record<string, string> = {
-  '/generate': '文案生成',
-  '/news': '新闻库',
-  '/dashboard': '消耗看板',
-  '/crawl-quota': '抓取与配额',
+// 菜单表未覆盖的非导航路由（如开发期组件走查页）在此兜底标题
+const EXTRA_TITLES: Record<string, string> = {
   '/components': '组件规范',
 }
 
@@ -39,9 +37,11 @@ export default function HeaderBar({
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const { menus } = useMenu()
   const { mode, toggle } = useThemeMode()
   const { message } = App.useApp()
-  const title = TITLES[pathname] ?? '文案生成'
+  // 面包屑标题由菜单数据派生，与侧栏保持一致
+  const title = menus.find((m) => m.path === pathname)?.label ?? EXTRA_TITLES[pathname] ?? '文案生成'
 
   const [search, setSearch] = useState('')
   // 今日 token 用量：admin 才有 /api/quota 权限（users[0]=当前用户真实今日用量）

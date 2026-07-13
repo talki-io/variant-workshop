@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from .models import (
     CrawlSource,
     LlmModel,
+    MenuItem,
     ModelConfig,
     QuotaConfig,
     StyleSample,
@@ -89,6 +90,30 @@ def seed_system(db: Session) -> None:
     # 配额页「按用户」由真实 users + 今日实时用量组装（routers/quota.py），无需灌任何用户配额数据。
     # （旧的 user_quota 假数据表已于迁移 0006 移除。）
 
+    # ---- 菜单：数据驱动侧栏的默认项（所有环境都需要，故放核心段）----
+    # path=已存在的前端路由；visible_roles 决定侧栏可见+前端可达；locked 项禁删（防自锁）。
+    if _empty(db, MenuItem):
+        _ALL = ["editor", "admin"]
+        _ADMIN = ["admin"]
+        db.add_all([
+            MenuItem(id="mn_generate", path="/generate", label="文案生成", icon="EditOutlined",
+                     order=1, visible_roles=_ALL, enabled=True, locked=False),
+            MenuItem(id="mn_news", path="/news", label="新闻库", icon="ReadOutlined",
+                     order=2, visible_roles=_ALL, enabled=True, locked=False),
+            MenuItem(id="mn_accounts", path="/accounts", label="账号管理", icon="TeamOutlined",
+                     order=3, visible_roles=_ALL, enabled=True, locked=False),
+            MenuItem(id="mn_users", path="/users", label="用户管理", icon="UsergroupAddOutlined",
+                     order=4, visible_roles=_ADMIN, enabled=True, locked=True),
+            MenuItem(id="mn_menus", path="/menus", label="菜单管理", icon="MenuOutlined",
+                     order=5, visible_roles=_ADMIN, enabled=True, locked=True),
+            MenuItem(id="mn_models", path="/models", label="模型管理", icon="RobotOutlined",
+                     order=6, visible_roles=_ADMIN, enabled=True, locked=False),
+            MenuItem(id="mn_dashboard", path="/dashboard", label="消耗看板", icon="LineChartOutlined",
+                     order=7, visible_roles=_ADMIN, enabled=True, locked=False),
+            MenuItem(id="mn_crawl", path="/crawl-quota", label="抓取与配额", icon="DatabaseOutlined",
+                     order=8, visible_roles=_ADMIN, enabled=True, locked=False),
+        ])
+
     db.commit()
 
 
@@ -104,12 +129,13 @@ def seed_demo(db: Session) -> None:
         ])
 
     # ---- 调性 ----
+    # 账号按创建者隔离：演示账号归内置管理员 u_admin；editor 起始无账号，登录后自行新建。
     if _empty(db, Tone):
         db.add_all([
-            Tone(id="t1", handle="@akun_demo", name="犀利散户体", desc="短句 · 大量俚语"),
-            Tone(id="t2", handle="@value_hunter", name="价值猎手体", desc="长句 · 数据驱动"),
-            Tone(id="t3", handle="@macro_view", name="宏观视角体", desc="结构化 · 理性分析"),
-            Tone(id="t4", handle="@fun_trader", name="幽默交易体", desc="玩梗 · 轻松口语"),
+            Tone(id="t1", handle="@akun_demo", name="犀利散户体", desc="短句 · 大量俚语", owner_id="u_admin"),
+            Tone(id="t2", handle="@value_hunter", name="价值猎手体", desc="长句 · 数据驱动", owner_id="u_admin"),
+            Tone(id="t3", handle="@macro_view", name="宏观视角体", desc="结构化 · 理性分析", owner_id="u_admin"),
+            Tone(id="t4", handle="@fun_trader", name="幽默交易体", desc="玩梗 · 轻松口语", owner_id="u_admin"),
         ])
 
     # ---- 新闻 ----

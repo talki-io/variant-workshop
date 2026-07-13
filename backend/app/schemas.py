@@ -18,6 +18,7 @@ class UserOut(CamelModel):
     name: str
     role: str
     avatar: str | None = None
+    active: bool = True
 
 
 class LoginIn(CamelModel):
@@ -28,6 +29,54 @@ class LoginIn(CamelModel):
 class LoginOut(CamelModel):
     token: str
     user: UserOut
+
+
+# 用户管理（admin CRUD）
+class UserCreateIn(CamelModel):
+    name: str
+    role: str
+    password: str
+    active: bool = True
+
+
+class UserUpdateIn(CamelModel):
+    name: str | None = None
+    role: str | None = None
+    active: bool | None = None
+
+
+class PasswordIn(CamelModel):
+    password: str
+
+
+# ===== 菜单管理（数据驱动导航注册表）=====
+class MenuItemOut(CamelModel):
+    id: str
+    path: str
+    label: str
+    icon: str
+    order: int
+    visible_roles: list[str]
+    enabled: bool
+    locked: bool
+
+
+class MenuItemCreateIn(CamelModel):
+    path: str
+    label: str
+    icon: str
+    order: int = 0
+    visible_roles: list[str]
+    enabled: bool = True
+
+
+class MenuItemUpdateIn(CamelModel):
+    path: str | None = None
+    label: str | None = None
+    icon: str | None = None
+    order: int | None = None
+    visible_roles: list[str] | None = None
+    enabled: bool | None = None
 
 
 # ===== 调性 / 账号 =====

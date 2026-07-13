@@ -1,39 +1,24 @@
 import { Layout, Menu, Avatar, Dropdown, Tag, Tooltip } from 'antd'
-import {
-  EditOutlined,
-  ReadOutlined,
-  LineChartOutlined,
-  DatabaseOutlined,
-  LogoutOutlined,
-  UserOutlined,
-  DownOutlined,
-  AppstoreOutlined,
-  TeamOutlined,
-  RobotOutlined,
-} from '@ant-design/icons'
+import { LogoutOutlined, UserOutlined, DownOutlined, AppstoreOutlined } from '@ant-design/icons'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import { useMenu } from '../menu/MenuContext'
+import { renderMenuIcon } from './menuIcons'
 import { brand } from '../theme/tokens'
 
 const { Sider } = Layout
 
 export default function AppSider({ collapsed = false }: { collapsed?: boolean }) {
   const { user, logout } = useAuth()
+  const { menus } = useMenu()
   const navigate = useNavigate()
   const location = useLocation()
 
+  // 侧栏项由菜单注册表数据驱动（已按 order + 角色可见性从后端返回）
   const items = [
-    { key: '/generate', icon: <EditOutlined />, label: '文案生成' },
-    { key: '/news', icon: <ReadOutlined />, label: '新闻库' },
-    ...(user?.role === 'admin'
-      ? [
-          { key: '/accounts', icon: <TeamOutlined />, label: '账号管理' },
-          { key: '/models', icon: <RobotOutlined />, label: '模型管理' },
-          { key: '/dashboard', icon: <LineChartOutlined />, label: '消耗看板' },
-          { key: '/crawl-quota', icon: <DatabaseOutlined />, label: '抓取与配额' },
-        ]
-      : []),
-    { key: '/components', icon: <AppstoreOutlined />, label: '组件规范' },
+    ...menus.map((m) => ({ key: m.path, icon: renderMenuIcon(m.icon), label: m.label })),
+    // 组件走查页仅开发期存在，不入菜单表；开发环境附加，方便视觉回归
+    ...(import.meta.env.DEV ? [{ key: '/components', icon: <AppstoreOutlined />, label: '组件规范' }] : []),
   ]
 
   return (

@@ -21,6 +21,11 @@ def login(body: LoginIn, db: Session = Depends(get_db)) -> LoginOut:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="用户名或密码错误",
         )
+    if not user.active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="账号已停用，请联系管理员",
+        )
     return LoginOut(token=create_token(user), user=UserOut.model_validate(user, from_attributes=True))
 
 

@@ -4,10 +4,58 @@
  * 假数据已隔离至 dev-only/mocks/，仅供开发期组件走查页使用；生产代码不依赖它。
  */
 import { apiFetch } from './http'
-import type { NewsItem, Tone, Variant, VariantBatch, GenerationSession, NewsContext, StyleSample, ModelConfig, LlmModel, Provider, DashboardData, CrawlSource, QuotaConfig, UserQuota, LabelState } from '../types'
+import type { NewsItem, Tone, Variant, VariantBatch, GenerationSession, NewsContext, StyleSample, ModelConfig, LlmModel, Provider, DashboardData, CrawlSource, QuotaConfig, UserQuota, LabelState, User, Role, MenuItem } from '../types'
 
 export function getTones(): Promise<Tone[]> {
   return apiFetch<Tone[]>('/tones')
+}
+
+// ===== 用户管理（admin）=====
+export interface UserInput {
+  name: string
+  role: Role
+  password: string
+  active?: boolean
+}
+export function getUsers(): Promise<User[]> {
+  return apiFetch<User[]>('/users')
+}
+export function createUser(payload: UserInput): Promise<User> {
+  return apiFetch<User>('/users', { method: 'POST', body: JSON.stringify(payload) })
+}
+export function updateUser(id: string, patch: Partial<Pick<User, 'name' | 'role' | 'active'>>): Promise<User> {
+  return apiFetch<User>(`/users/${id}`, { method: 'PUT', body: JSON.stringify(patch) })
+}
+export function resetUserPassword(id: string, password: string): Promise<{ ok: boolean }> {
+  return apiFetch<{ ok: boolean }>(`/users/${id}/password`, { method: 'PUT', body: JSON.stringify({ password }) })
+}
+export function deleteUser(id: string): Promise<{ ok: boolean }> {
+  return apiFetch<{ ok: boolean }>(`/users/${id}`, { method: 'DELETE' })
+}
+
+// ===== 菜单管理（数据驱动导航；GET /menus 任意登录用户，其余 admin）=====
+export interface MenuInput {
+  path: string
+  label: string
+  icon: string
+  order?: number
+  visibleRoles: Role[]
+  enabled?: boolean
+}
+export function getMenus(): Promise<MenuItem[]> {
+  return apiFetch<MenuItem[]>('/menus')
+}
+export function getAllMenus(): Promise<MenuItem[]> {
+  return apiFetch<MenuItem[]>('/menus/all')
+}
+export function createMenu(payload: MenuInput): Promise<MenuItem> {
+  return apiFetch<MenuItem>('/menus', { method: 'POST', body: JSON.stringify(payload) })
+}
+export function updateMenu(id: string, patch: Partial<MenuInput>): Promise<MenuItem> {
+  return apiFetch<MenuItem>(`/menus/${id}`, { method: 'PUT', body: JSON.stringify(patch) })
+}
+export function deleteMenu(id: string): Promise<{ ok: boolean }> {
+  return apiFetch<{ ok: boolean }>(`/menus/${id}`, { method: 'DELETE' })
 }
 
 // ===== 账号/调性管理（admin）=====

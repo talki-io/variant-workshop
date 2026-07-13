@@ -63,27 +63,32 @@ def test_generate_records_usage_then_enforces_quota():
     try:
         with TestClient(app) as client:
             headers = {"Authorization": f"Bearer {_token(client, 'editor')}"}
+            # 账号按用户隔离：editor 需用自己名下账号生成（离线回退 t1 库存内容，用量归 editor）
+            tid = client.post("/api/tones", headers=headers,
+                              json={"handle": "@q_editor", "name": "配额测试体", "desc": "t"}).json()["id"]
+            try:
+                # 首次生成成功，并落一行 token_usage
+                r1 = client.post("/api/variants", json={"toneId": tid, "prompt": "tes"}, headers=headers)
+                assert r1.status_code == 200
+                with SessionLocal() as db:
+                    assert db.query(TokenUsage).filter(TokenUsage.user == "editor").count() == 1
 
-            # 首次生成成功，并落一行 token_usage
-            r1 = client.post("/api/variants", json={"toneId": "t1", "prompt": "tes"}, headers=headers)
-            assert r1.status_code == 200
-            with SessionLocal() as db:
-                assert db.query(TokenUsage).filter(TokenUsage.user == "editor").count() == 1
+                # 人为把今日用量顶到 per_user_daily，再次生成应 429
+                with SessionLocal() as db:
+                    cfg = db.get(QuotaConfig, 1)
+                    db.add(TokenUsage(
+                        id="test_big_editor", user="editor",
+                        time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        model="Sonnet", input_tokens=cfg.per_user_daily, output_tokens=0,
+                        cost=0.0, scene="文案生成",
+                    ))
+                    db.commit()
 
-            # 人为把今日用量顶到 per_user_daily，再次生成应 429
-            with SessionLocal() as db:
-                cfg = db.get(QuotaConfig, 1)
-                db.add(TokenUsage(
-                    id="test_big_editor", user="editor",
-                    time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    model="Sonnet", input_tokens=cfg.per_user_daily, output_tokens=0,
-                    cost=0.0, scene="文案生成",
-                ))
-                db.commit()
-
-            r2 = client.post("/api/variants", json={"toneId": "t1", "prompt": "tes"}, headers=headers)
-            assert r2.status_code == 429
-            assert "配额" in r2.json()["detail"]
+                r2 = client.post("/api/variants", json={"toneId": tid, "prompt": "tes"}, headers=headers)
+                assert r2.status_code == 429
+                assert "配额" in r2.json()["detail"]
+            finally:
+                client.delete(f"/api/tones/{tid}", headers=headers)
     finally:
         _restore("editor", saved)
 

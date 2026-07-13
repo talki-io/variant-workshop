@@ -73,7 +73,7 @@ def main() -> int:
             print(f"用户 {name!r} 已存在。", file=sys.stderr)
             return 1
         db.add(User(id=f"u_{uuid.uuid4().hex[:12]}", name=name, role=args.role,
-                    password_hash=hash_password(password)))
+                    password_hash=hash_password(password), active=True))
         db.commit()
 
     print(f"{args.role} {name!r} 已创建。")

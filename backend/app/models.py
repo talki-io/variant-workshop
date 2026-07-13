@@ -22,6 +22,8 @@ class User(Base):
     role: Mapped[str] = mapped_column(String, nullable=False)  # 'editor' | 'admin'
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
     avatar: Mapped[str | None] = mapped_column(String, nullable=True)
+    # 启用/停用（软删）：停用后不能登录、现存 token 失效，但保留历史与归属。迁移 0013。
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 
 class Tone(Base):
@@ -31,6 +33,9 @@ class Tone(Base):
     handle: Mapped[str] = mapped_column(String, nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
     desc: Mapped[str] = mapped_column(String, nullable=False)
+    # 归属用户（users.id）。账号与其参考爆款样本按创建者隔离，各用户只管理自己新增的。
+    # 存量账号（迁移 0012）回填 u_admin；nullable 仅为兼容历史，新建必写。
+    owner_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
 
 
 class News(Base):
@@ -216,3 +221,24 @@ class StyleSample(Base):
     source: Mapped[str | None] = mapped_column(String, nullable=True)  # 备注/来源标签
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[str] = mapped_column(String, nullable=False)
+
+
+class MenuItem(Base):
+    """数据驱动的侧栏导航项：侧栏与面包屑从本表渲染（迁移 0014）。
+
+    path = 菜单 key = 前端路由（须是代码里已存在的可路由 path，菜单只治理其展示与可见性，
+    不能凭空造出可用页面）。icon 为前端图标白名单注册表的键名。visible_roles 决定哪些角色
+    在侧栏可见 + 前端可达（真正的数据安全仍靠后端各敏感端点的 require_admin 兜底）。
+    locked=true 的核心项（用户/菜单管理）禁止删除，防管理员误配自锁。
+    """
+
+    __tablename__ = "menu_item"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    path: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    label: Mapped[str] = mapped_column(String, nullable=False)
+    icon: Mapped[str] = mapped_column(String, nullable=False)
+    order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    visible_roles: Mapped[list] = mapped_column(JSONB, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
