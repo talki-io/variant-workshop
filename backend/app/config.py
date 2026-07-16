@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     # False 时跳过演示数据（种子账号 admin/editor 密码均为 demo1234、示例调性/变体/样本）。
     # 生产必须设 False，否则空库首启会留下固定密码的可登录后门；管理员改用 python -m app.create_user --role admin 建。
     seed_demo_data: bool = True
+    # 新闻契约令牌：Java（yudao module-variant）拉取 /api/contract/news 时凭 X-Service-Token 校验。
+    # 为空则契约端点返回 503（未配置）——生产必须注入，杜绝空令牌匹配空配置的后门。
+    service_token: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

@@ -7,7 +7,7 @@
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -53,6 +53,14 @@ class News(Base):
     angle_hints: Mapped[list] = mapped_column(JSONB, nullable=False)
     url: Mapped[str] = mapped_column(String, nullable=False)
     label: Mapped[str] = mapped_column(String, nullable=False)  # none|relevant|irrelevant
+    # ↓ 迁移 0015：新闻契约（Java 拉取 + 富化移交 Java）新增字段
+    # 原文摘要（RSS description / content:encoded 清洗后，≤600 字）。富化移交 Java 后，作为其富化输入；
+    # 此前该文本仅作富化入参、用完即丢，News 未持久化 → Java 无米下锅，故补此列。
+    summary: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    # 入库时间（机器游标）：Java 增量拉取以此为 watermark，与 published_at（可回填历史时间）解耦。
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
 
 class Variant(Base):

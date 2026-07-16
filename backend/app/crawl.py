@@ -216,6 +216,8 @@ def ingest_entries(db: Session, source_name: str, entries: list[FeedEntry], enri
             angle_hints=card["angle_hints"],
             url=e.link,
             label=label,
+            # 原文摘要持久化：供 Java 侧富化（相关性/摘要/key_facts）。sanitize 中和注入片段。
+            summary=sanitize_untrusted(e.summary),
         ))
 
     # 入库：先试整批提交（快路径）；若与并发抓取撞主键（同源被重复触发），回退逐条插入跳过冲突，

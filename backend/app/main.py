@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 
 from .config import settings
 from .db import SessionLocal
-from .routers import auth, compliance, dashboard, menus, models, news, quota, sources, telemetry, tones, users, variants
+from .routers import auth, compliance, dashboard, feed, menus, models, news, quota, sources, telemetry, tones, users, variants
 from .seed import seed
 
 # 默认/占位密钥值——若线上用这些则拒绝安全承诺（§7 P1-4）。
@@ -60,7 +60,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for r in (auth, tones, variants, news, dashboard, sources, quota, compliance, telemetry, models, users, menus):
+for r in (auth, tones, variants, news, dashboard, sources, quota, compliance, telemetry, models, users, menus, feed):
     app.include_router(r.router)
 
 

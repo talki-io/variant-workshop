@@ -4,6 +4,8 @@
 `populate_by_name=True` 允许用字段名或 alias 构造；response 用 by_alias 输出。
 """
 
+from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 
@@ -263,6 +265,30 @@ class NewsPageOut(CamelModel):
 
 class NewsLabelIn(CamelModel):
     label: str  # none | relevant | irrelevant
+
+
+# ===== 新闻契约（variant-migration：Java 拉取 + 富化移交 Java）=====
+class NewsFeedItem(CamelModel):
+    """GET /api/contract/news 出参：喂给 Java(module-variant) 富化的「原始新闻」。
+
+    只暴露原始事实字段 + 机器游标 ingestedAt；富化字段（keyFacts/tickers/heat/label）
+    由 Java 侧用 module-ai 计算，不在此契约内——采集器已不再负责富化。
+    """
+
+    id: str
+    headline: str
+    source: str
+    url: str
+    published_at: str
+    summary: str
+    ingested_at: datetime
+
+
+class NewsFeedPage(CamelModel):
+    items: list[NewsFeedItem]
+    # 本页最后一条的 ingestedAt。Java 存为 watermark，下次 since=nextSince 增量拉取；
+    # 无更多数据时为 null。
+    next_since: datetime | None = None
 
 
 # ===== 消耗看板 =====
