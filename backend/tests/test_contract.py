@@ -73,9 +73,70 @@ def test_contract_pulls_incrementally(monkeypatch):
         assert by_id[ia]["summary"] == "isi A"
         assert "ingestedAt" in by_id[ia] and "publishedAt" in by_id[ia]
         assert body["nextSince"] is not None
-        # 以 nextSince 增量再拉：严格大于 → A/B 不重复出现
-        r2 = client.get("/api/contract/news", headers=h, params={"since": body["nextSince"]})
+        assert body["nextId"] is not None
+        # 以复合游标 (nextSince, nextId) 增量再拉：A/B 不重复出现
+        r2 = client.get(
+            "/api/contract/news",
+            headers=h,
+            params={"since": body["nextSince"], "sinceId": body["nextId"]},
+        )
         ids2 = {it["id"] for it in r2.json()["items"]}
         assert ia not in ids2 and ib not in ids2
     finally:
         _cleanup()
+
+
+_TIED_URLS = [f"https://contract.test/tied-{i}" for i in range(5)]
+
+
+def _cleanup_tied() -> None:
+    with SessionLocal() as db:
+        for u in _TIED_URLS:
+            row = db.get(News, url_fingerprint(u))
+            if row:
+                db.delete(row)
+        db.commit()
+
+
+def test_contract_cursor_does_not_skip_rows_sharing_ingested_at(monkeypatch):
+    """同一 ingested_at 的多行跨页时一条都不能丢（复合游标回归测试）。
+
+    这不是假想场景：迁移 0015 给存量行统一盖了 now()，实测 356 行共享同一个时间戳。
+    修复前游标只带 ingested_at 且用严格 `>` 比较，第二页会把同刻行整体跳过 ——
+    356 行只拉得到前 100 行，其余 256 行永久不可达，而调用方收到的是「成功、0 条新数据」，
+    毫无异常迹象。故此处强制 5 行同刻、逐页 limit=2 翻，断言 5 行全部拉到且不重复。
+    """
+    monkeypatch.setattr(settings, "service_token", "svc-secret")
+    h = {"X-Service-Token": "svc-secret"}
+    _cleanup_tied()
+    try:
+        with SessionLocal() as db:
+            ingest_entries(db, "src", [
+                FeedEntry(title=f"tied {i}", link=u, summary=f"isi {i}")
+                for i, u in enumerate(_TIED_URLS)
+            ])
+            # 强制 5 行 ingested_at 完全相同 —— 复现迁移 0015 的存量行状态
+            tied_at = datetime.now(timezone.utc)
+            ids = [url_fingerprint(u) for u in _TIED_URLS]
+            for nid in ids:
+                db.get(News, nid).ingested_at = tied_at
+            db.commit()
+
+        since = (tied_at - timedelta(seconds=1)).isoformat()
+        since_id = None
+        seen: list[str] = []
+        for _ in range(10):
+            params = {"limit": 2, "since": since}
+            if since_id is not None:
+                params["sinceId"] = since_id
+            body = client.get("/api/contract/news", headers=h, params=params).json()
+            if not body["items"]:
+                break
+            seen.extend(it["id"] for it in body["items"])
+            since, since_id = body["nextSince"], body["nextId"]
+
+        for nid in ids:
+            assert nid in seen, "同刻行被游标跳过 —— 复合游标失效，见本用例 docstring"
+        assert len(seen) == len(set(seen)), "同一行被重复投递"
+    finally:
+        _cleanup_tied()

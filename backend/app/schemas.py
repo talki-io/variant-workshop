@@ -286,9 +286,15 @@ class NewsFeedItem(CamelModel):
 
 class NewsFeedPage(CamelModel):
     items: list[NewsFeedItem]
-    # 本页最后一条的 ingestedAt。Java 存为 watermark，下次 since=nextSince 增量拉取；
-    # 无更多数据时为 null。
+    # 本页最后一条的 (ingestedAt, id) —— 复合游标。Java 存为 watermark，
+    # 下次以 since=nextSince&sinceId=nextId 增量拉取；无更多数据时均为 null。
+    #
+    # 为何游标要带 id（2026-07-17 修）：ingested_at 并不唯一——迁移 0015 给存量行统一盖了 now()，
+    # 实测 356 行共享同一个时间戳。若游标只有时间戳、且用严格 `>` 比较，第二页会把所有
+    # 同刻行整体跳过：356 行里只有前 100 行能被拉到，其余 256 行永久不可达，且拉取方
+    # 收到的是「成功、0 条新数据」，毫无异常迹象。
     next_since: datetime | None = None
+    next_id: str | None = None
 
 
 # ===== 消耗看板 =====
